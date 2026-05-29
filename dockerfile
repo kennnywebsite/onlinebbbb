@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) gd bcmath mysqli pdo_mysql
 
-# Apache Config
 RUN a2enmod rewrite
 RUN echo '<VirtualHost *:80>\n\
     DocumentRoot /var/www/html/public\n\
@@ -27,11 +26,14 @@ RUN echo '<VirtualHost *:80>\n\
 WORKDIR /var/www/html
 COPY . .
 
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+# Copy and setup the entrypoint script
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Install dependencies WITHOUT running scripts (prevents artisan crashes)
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 RUN composer install --no-dev --optimize-autoloader --no-scripts --ignore-platform-reqs
 
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-EXPOSE 80
+# This tells Docker to use our script as the startup command
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
