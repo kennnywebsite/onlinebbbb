@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) gd bcmath mysqli pdo_mysql
 
-# Apache Config
+# --- FIXED APACHE CONFIG FOR YOUR STRUCTURE ---
 RUN a2enmod rewrite
 RUN echo '<VirtualHost *:80>\n\
-    DocumentRoot /var/www/html/public\n\
+    DocumentRoot /var/www/html\n\
     DirectoryIndex index.php\n\
     SetEnvIf X-Forwarded-Proto "https" HTTPS=on\n\
-    <Directory /var/www/html/public>\n\
+    <Directory /var/www/html>\n\
         Options FollowSymLinks\n\
         AllowOverride All\n\
         Require all granted\n\
@@ -27,13 +27,6 @@ RUN echo '<VirtualHost *:80>\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
 WORKDIR /var/www/html
-
-# --- FIX: Create directories and set permissions before copying files ---
-RUN mkdir -p /var/www/html/storage/framework/cache/data \
-    /var/www/html/storage/framework/sessions \
-    /var/www/html/storage/framework/views \
-    /var/www/html/bootstrap/cache
-
 COPY . .
 
 # Copy and setup entrypoint
@@ -43,9 +36,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 RUN composer install --no-dev --optimize-autoloader --no-scripts --ignore-platform-reqs
 
-# Ensure permissions for the web user
+# Fix permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Use the entrypoint script
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
