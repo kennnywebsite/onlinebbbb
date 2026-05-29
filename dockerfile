@@ -1,41 +1,34 @@
-# 1. Use PHP 8.4 to satisfy symfony/css-selector requirement
-FROM php:8.4-apache
+# Use PHP 8.1
+FROM php:8.1-apache
 
-# 2. Install system tools and libraries for PHP extensions (gd, bcmath, etc.)
+# Install System Dependencies
 RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    zip \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
+    git unzip libpng-dev libjpeg-dev libfreetype6-dev libbcmath-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install and enable required PHP extensions
+# Install Extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd bcmath mysqli \
-    && docker-php-ext-enable gd bcmath mysqli
+    && docker-php-ext-install -j$(nproc) gd bcmath mysqli pdo_mysql
 
-# 4. Enable Apache mod_rewrite
+# Apache Config (Points web root to /public)
 RUN a2enmod rewrite
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# 5. Get Composer from the official Composer image
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+WORKDIR /var/www/html
 
-# Set the working directory
-WORKDIR /var/www/html/
-
-# 6. Copy only composer files first
-COPY composer.json composer.lock* ./
-
-# 7. RUN COMPOSER (Added --ignore-platform-reqs as a safety net)
-RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs
-
-# 8. Copy the rest of your PHP project files
+# Copy files
 COPY . .
 
-# Update permissions
-RUN chown -R www-data:www-data /var/www/html
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Expose port 80
+# Install Dependencies and run artisan
+# We run migrate here. Note: This assumes your DB env variables are 
+# set in the Render Dashboard "Environment" tab.
+RUN composer install --no-dev --optimize-autoloader --no-scripts --ignore-platform-reqs && \
+    php artisan package:discover --ansi && \
+    chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
 EXPOSE 80
