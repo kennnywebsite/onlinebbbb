@@ -5,6 +5,8 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
+putenv('APP_STORAGE=/var/www/html/storage');
+
 /*
 |--------------------------------------------------------------------------
 | Check If Application Is Under Maintenance
