@@ -2,9 +2,6 @@
 
 use Illuminate\Support\Str;
 
-// DEBUG: Can we see the variables?
-\Illuminate\Support\Facades\Log::info('DB_HOST_CHECK: ' . env('DB_HOST', 'NOT_FOUND'));
-\Illuminate\Support\Facades\Log::info('DB_PORT_CHECK: ' . env('DB_PORT', 'NOT_FOUND'));
 
 return [
 
