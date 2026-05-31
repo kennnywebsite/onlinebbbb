@@ -25,20 +25,27 @@ class SettingsServiceProvider extends ServiceProvider
      * @return void
      */
     public function boot()
-    {
-        $settings = Settings::where('id', '1')->first();
-        $paystack = Paystack::where('id', '1')->first();
+{
+    // 1. Never run this during CLI/Migrations/Artisan commands
+    if ($this->app->runningInConsole()) {
+        return;
+    }
+
+    try {
+        // 2. Use 'first()' safely, or better yet, verify connection
+        $settings = Settings::find(1);
+        $paystack = Paystack::find(1);
         $settings2 = SettingsCont::find(1);
 
-
-        if ($settings->install_type == 'Sub-Folder') {
-            $urls = explode('/', $settings->site_address);
-            $assetUrl = '/' . end($urls);
-        } else {
-            $assetUrl = null;
+        // 3. If settings are missing (first time install or DB error), abort the logic
+        if (!$settings || !$paystack || !$settings2) {
+            return;
         }
 
-        // Set configuration values at run time
+        $assetUrl = ($settings->install_type == 'Sub-Folder') 
+            ? '/' . end(explode('/', $settings->site_address)) 
+            : null;
+
         config([
             'captcha.secret' => $settings->capt_secret,
             'captcha.sitekey' => $settings->capt_sitekey,
@@ -66,5 +73,11 @@ class SettingsServiceProvider extends ServiceProvider
             'flutterwave.secretHash' => $settings2->flw_secret_hash,
             'services.telegram-bot-api.token' =>  $settings2->telegram_bot_api,
         ]);
+        
+    } catch (\Exception $e) {
+        // Log the error, but do NOT crash the app.
+        \Illuminate\Support\Facades\Log::error('SettingsServiceProvider Error: ' . $e->getMessage());
+        return;
     }
+}
 }
