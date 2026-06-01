@@ -14,6 +14,7 @@ class VerifyCsrfToken extends Middleware
     protected $except = [
         'get-started/',
         '/serviceworker.js',
-        'https://onlinetrader.sharedwithexpose.com/get-started'
+        'https://onlinetrader.sharedwithexpose.com/get-started',
+        'auth/login',
     ];
 }
