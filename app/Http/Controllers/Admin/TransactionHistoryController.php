@@ -1,46 +1,34 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\User;
-use App\Models\Settings;
-use App\Models\Withdrawal;
-use App\Mail\NewNotification;
-use App\Helpers\NotificationHelper;
-use Illuminate\Support\Facades\Mail;
+use App\Models\{User, Settings, Withdrawal};
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class TransactionHistoryController extends Controller
 {
     /**
-     * Show the form for generating transaction history
-     *
-     * @return \Illuminate\Contracts\View\View
+     * Get summary data for the generation form
      */
-    public function showForm()
+    public function getFormData()
     {
-        $users = User::all();
-        $settings = Settings::where('id', '=', '1')->first();
-        
-        return view('admin.transaction-history.generate', [
-            'users' => $users,
-            'settings' => $settings,
-            'title' => 'Generate Transaction History',
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'users' => User::select('id', 'name', 'email')->get(),
+                'settings' => Settings::first()
+            ]
         ]);
     }
-    
+
     /**
-     * Generate new transaction history entries in bulk
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse
+     * Generate bulk transaction history entries
      */
     public function generateHistory(Request $request)
     {
-        // Validate the request
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'num_transactions' => 'required|integer|min:1|max:50',
@@ -52,80 +40,49 @@ class TransactionHistoryController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
         ]);
-        
-        // Get user and settings
-        $user = User::findOrFail($request->user_id);
-        
-        // Convert dates to Carbon instances
+
         $startDate = Carbon::parse($request->start_date);
         $endDate = Carbon::parse($request->end_date);
-        
-        // Calculate the total time span in seconds
-        $timeSpanInSeconds = $endDate->diffInSeconds($startDate);
-        
-        // Generate multiple transactions
+        $timeSpan = $endDate->diffInSeconds($startDate);
+
         for ($i = 0; $i < $request->num_transactions; $i++) {
-            // Generate random amount between min and max
             $amount = mt_rand($request->min_amount * 100, $request->max_amount * 100) / 100;
-            
-            // Generate random timestamp between start and end date
-            $randTimeOffset = mt_rand(0, $timeSpanInSeconds);
-            $transactionDate = $startDate->copy()->addSeconds($randTimeOffset);
-            
-            // Generate transaction ID based on type (GLOB for domestic, INTE for international)
-            $prefix = $request->payment_mode === 'International Wire Transfer' ? 'INTE/' : 'GLOB/';
-            $random_str = strtoupper(Str::random(8));
-            $txn_id = $prefix . $random_str . '-' . $transactionDate->format('Y');
-            
-            // Generate random description
-            $descriptions = [
-                'Credit' => [
-                    'Deposit via ' . $request->payment_mode,
-                    'Funds received through ' . $request->payment_mode,
-                    'Payment received',
-                    'Account credit',
-                    'Incoming transfer'
-                ],
-                'Debit' => [
-                    'Withdrawal via ' . $request->payment_mode,
-                    'Payment sent',
-                    'Funds transfer',
-                    'Account debit',
-                    'Outgoing transfer'
-                ]
-            ];
-            
-            $descriptionIndex = array_rand($descriptions[$request->transaction_type]);
-            $description = $descriptions[$request->transaction_type][$descriptionIndex];
-            
-            // Create new withdrawal record
+            $transactionDate = $startDate->copy()->addSeconds(mt_rand(0, $timeSpan));
+
             $withdrawal = new Withdrawal();
-            $withdrawal->txn_id = $txn_id;
+            $withdrawal->txn_id = ($request->payment_mode === 'International Wire Transfer' ? 'INTE/' : 'GLOB/') . strtoupper(Str::random(8)) . '-' . $transactionDate->format('Y');
             $withdrawal->user = $request->user_id;
             $withdrawal->amount = $amount;
-            $withdrawal->description = $description;
             $withdrawal->payment_mode = $request->payment_mode;
             $withdrawal->type = $request->transaction_type;
             $withdrawal->status = $request->status;
             $withdrawal->created_at = $transactionDate;
             $withdrawal->date = $transactionDate;
-            $withdrawal->updated_at = Carbon::now();
             
-            // Set payment-specific mock data based on the payment method
+            // Set payment-specific data
             $this->setPaymentData($withdrawal, $request->payment_mode);
-            
             $withdrawal->save();
         }
-        
-        return redirect()->route('transaction.history')->with('success', $request->num_transactions . ' transaction history entries generated successfully!');
+
+        return response()->json([
+            'status' => 200, 
+            'message' => $request->num_transactions . ' entries generated successfully.'
+        ]);
     }
-    
+
     /**
-     * Set mock payment data based on payment method
-     *
-     * @param  \App\Models\Withdrawal  $withdrawal
-     * @param  string  $paymentMode
-     * @return void
+     * Fetch all history
+     */
+    public function index()
+    {
+        return response()->json([
+            'status' => 200,
+            'data' => Withdrawal::with('duser')->orderBy('created_at', 'desc')->get()
+        ]);
+    }
+
+    /**
+     * Set mock payment data (Keep existing private helper logic)
      */
     private function setPaymentData(Withdrawal $withdrawal, $paymentMode)
     {
@@ -409,13 +366,7 @@ class TransactionHistoryController extends Controller
                 break;
         }
     }
-    
-    /**
-     * Get a random account type based on the transfer type
-     *
-     * @param string $transferType
-     * @return string
-     */
+
     private function getRandomAccountType($transferType)
     {
         if ($transferType === 'international') {
@@ -434,22 +385,5 @@ class TransactionHistoryController extends Controller
         }
         
         return $accountTypes[array_rand($accountTypes)];
-    }
-    
-    /**
-     * View all generated transaction history
-     *
-     * @return \Illuminate\Contracts\View\View
-     */
-    public function viewHistory()
-    {
-        $withdrawals = Withdrawal::with('duser')->orderBy('created_at', 'desc')->get();
-        $settings = Settings::where('id', '=', '1')->first();
-        
-        return view('admin.transaction-history.view', [
-            'withdrawals' => $withdrawals,
-            'settings' => $settings,
-            'title' => 'Transaction History',
-        ]);
     }
 }

@@ -2,34 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
-use Illuminate\Routing\Controller as BaseController;
 
-use App\Models\User;
-use App\Models\Settings;
-use App\Models\Agent;
-use App\Models\Deposit;
-use App\Models\Tp_Transaction;
+use App\Models\{User, Settings, Agent, Deposit, Tp_Transaction};
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Mail\DepositStatus;
 use App\Traits\Coinpayment;
 use Illuminate\Support\Facades\Mail;
 
-
 class Controller extends BaseController
 {
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests, Coinpayment;
 
-    //verify PayPal deposits
+    // API version of paypalverify
     public function paypalverify($amount)
     {
+        $user = Auth::user();
 
-        $user = User::where('id', Auth::user()->id)->first();
-
-        //save and confirm the deposit
+        // Save deposit
         $dp = new Deposit();
         $dp->amount = $amount;
         $dp->payment_mode = "PayPal";
@@ -39,69 +33,55 @@ class Controller extends BaseController
         $dp->user = $user->id;
         $dp->save();
 
+        // Add funds
+        $user->increment('account_bal', $amount);
 
-        //add funds to user's account
-        User::where('id', $user->id)
-            ->update([
-                'account_bal' => $user->account_bal + $amount,
-            ]);
-
-        //get settings 
-        $settings = Settings::where('id', '=', '1')->first();
-        $earnings = $settings->referral_commission * $amount / 100;
-
+        // Handle Referrals
+        $settings = Settings::where('id', '1')->first();
         if (!empty($user->ref_by)) {
-            //increment the user's referee total clients activated by 1
+            $earnings = ($settings->referral_commission * $amount) / 100;
+            
             Agent::where('agent', $user->ref_by)->increment('total_activated', 1);
             Agent::where('agent', $user->ref_by)->increment('earnings', $earnings);
 
-            //add earnings to agent balance
-            //get agent
             $agent = User::where('id', $user->ref_by)->first();
-            User::where('id', $user->ref_by)
-                ->update([
-                    'account_bal' => $agent->account_bal + $earnings,
-                ]);
+            if ($agent) {
+                $agent->increment('account_bal', $earnings);
+            }
 
-            //credit commission to ancestors
-            $deposit_amount = $amount;
-            $array = User::all();
-            $parent = $user->id;
-            $this->getAncestors($array, $deposit_amount, $parent);
+            $this->getAncestors(User::all(), $amount, $user->id);
         }
 
-        //send email notification
-        $objDemo = new \stdClass();
-        $objDemo->message = "$user->name, This is to inform you that your deposit of $settings->currency$amount has been received and confirmed.";
-        $objDemo->sender = "$settings->site_name";
-        $objDemo->date = \Carbon\Carbon::Now();
-        $objDemo->subject = "Deposit processed!";
+        // Email notification
+        Mail::to($user->email)->send(new DepositStatus($dp, $user, 'Successful Deposit'));
 
-        Mail::to($user->email)->send(new DepositStatus($dp, $user, 'Succsessful Deposit'));
-        return redirect()->route('deposits')->with('message', 'Deposit Sucessful!');
+        // API Response instead of redirect
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Deposit Successful!',
+            'deposit_id' => $dp->id
+        ], 200);
     }
 
-
-
-    //Controller self ref issue
+    // API version of ref
     public function ref(Request $request, $id)
     {
         if (isset($id)) {
             $request->session()->flush();
-            if (count(User::where('username', $id)->get()) == 1) {
+            if (User::where('username', $id)->exists()) {
                 $request->session()->put('ref_by', $id);
+                return response()->json(['status' => 'success', 'message' => 'Referral session set']);
             }
-            return redirect()->route('register');
+            return response()->json(['status' => 'error', 'message' => 'Invalid Referral Code'], 404);
         }
+        return response()->json(['status' => 'error', 'message' => 'No ID provided'], 400);
     }
 
-
-    // pay with coinpayment option
+    // cpay remains essentially the same as it returns the result of the trait method
     public function cpay($amount, $coin, $ui, $msg)
     {
         return $this->paywithcp($amount, $coin, $ui, $msg);
     }
-
 
     public function getRefs($array, $parent, $level = 0)
     {

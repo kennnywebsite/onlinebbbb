@@ -44,10 +44,11 @@ Route::post('/reset-password', [NewPasswordController::class, 'store'])
 
 Route::get('/up-db', function () {
     try {
-        \DB::connection()->getPdo();
+        DB::select('SELECT 1');
+        
         return response('OK', 200);
     } catch (\Exception $e) {
-        return response('Database Connection Failed', 500);
+        return response('Database Connection Failed: ' . $e->getMessage(), 500);
     }
 });
 

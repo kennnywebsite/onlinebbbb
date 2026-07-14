@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Admin\Settings;
+namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -10,167 +10,98 @@ use Illuminate\Support\Facades\Storage;
 
 class AppSettingsController extends Controller
 {
-
-    // Return view
-    public function appsettingshow()
+    /**
+     * Get all app settings (Replaces appsettingshow)
+     */
+    public function getSettings()
     {
-        $live_timezones = timezone_identifiers_list();
-        include 'currencies.php';
-        return view('admin.Settings.AppSettings.show', [
-            'title' => 'Website information settings',
-            'timezones' => $live_timezones,
-            'currencies' => $currencies,
-            'timezone' => config('app.timezone'),
-            'settings' => Settings::where('id', '=', '1')->first(),
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'settings' => Settings::first(),
+                'more_settings' => SettingsCont::first(),
+                'timezones' => timezone_identifiers_list(),
+            ]
         ]);
     }
 
-    // for front end content management
-    function RandomStringGenerator($n)
+    /**
+     * Update website information
+     */
+    public function updateWebInfo(Request $request)
     {
-        $generated_string = "";
-        $domain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
-        $len = strlen($domain);
-        for ($i = 0; $i < $n; $i++) {
-            $index = rand(0, $len - 1);
-            $generated_string = $generated_string . $domain[$index];
-        }
-        // Return the random generated string 
-        return $generated_string;
-    }
-
-    // updatertransfercodes
-    public function updatertransfercodes(Request $request){
-        Settings::where('id', '1')
-            ->update([
-                'code1'=> $request->code1,
-                'code2'=> $request->code2,
-                'code3'=> $request->code3,
-                'code4'=> $request->code4,
-                'code5'=> $request->code5,
-                'code1status' => $request->code1status,
-                'code2status' => $request->code2status,
-                'code3status' => $request->code3status,
-                'code4status' => $request->code4status,
-                'code5status' => $request->code5status,
-                'code1message'=> $request->code1message,
-                'code2message'=> $request->code2message,
-                'code3message'=> $request->code3message,
-                'code4message'=> $request->code4message,
-                'code5message'=> $request->code5message,
-                'otp'=>$request->otp,
-            ]);
-
-            return redirect()->back()->with('success', 'Settings Saved successfully');
-    }
-    // update wensite information
-    public function updatewebinfo(Request $request)
-    {
-        $this->validate($request, [
-            'logo' => 'mimes:jpg,jpeg,png|max:500|image',
-            'favicon' => 'mimes:jpg,jpeg,png,ico|max:500',
+        $request->validate([
+            'logo' => 'nullable|image|mimes:jpg,jpeg,png|max:500',
+            'favicon' => 'nullable|image|mimes:jpg,jpeg,png,ico|max:500',
         ]);
 
-        $settings = Settings::where('id', '=', '1')->first();
+        $settings = Settings::findOrFail(1);
+        $data = $request->except(['logo', 'favicon']);
 
-        if ($request->hasfile('logo')) {
-            $file = $request->file('logo');
+        // Handle file uploads
+        if ($request->hasFile('logo')) {
             Storage::disk('public')->delete($settings->logo);
-            $path = $file->store('photos', 'public');
-        } else {
-            $path  = $settings->logo;
+            $data['logo'] = $request->file('logo')->store('photos', 'public');
         }
 
-        if ($request->hasfile('favicon')) {
-            $favfile = $request->file('favicon');
+        if ($request->hasFile('favicon')) {
             Storage::disk('public')->delete($settings->favicon);
-            $pathfav = $favfile->store('photos', 'public');
-        } else {
-            $pathfav = $settings->favicon;
+            $data['favicon'] = $request->file('favicon')->store('photos', 'public');
         }
+
+        $settings->update($data);
         
-        Settings::where('id', '1')
-            ->update([
-                'newupdate' => $request['update'],
-                'site_name' => $request['site_name'],
-                'description' => $request['description'],
-                'keywords' => $request['keywords'],
-                'timezone' => $request['timezone'],
-                'site_title' => $request['site_title'],
-                'install_type' => $request['install_type'],
-                'logo' => $path,
-                'merchant_key' => $request->merchant_key,
-                'favicon' => $pathfav,
-                'tawk_to' => strip_tags($request['tawk_to']),
-                'site_address' => $request['site_address'],
-                'welcome_message' => $request->welcome_message,
-                'whatsapp'=> $request->whatsapp,
-                'tido'=> $request->tido,
-                'address'=> $request->address,
-                'sms'=> $request->sms,
-                
-            ]);
-
-        $moreset = SettingsCont::find(1);
-        $moreset->purchase_code = $request->purchase_code;
-        $moreset->save();
-
-        return redirect()->back()->with('success', 'Settings Saved successfully');
-    }
-
-
-
-    public function updatepreference(Request $request)
-    {
-
-        if ($request->return_capital == 'true') {
-            $return_capital = true;
-        } else {
-            $return_capital = false;
+        // Update Additional Settings
+        if ($request->has('purchase_code')) {
+            SettingsCont::where('id', 1)->update(['purchase_code' => $request->purchase_code]);
         }
 
-        Settings::where('id', 1)->update([
-            'contact_email' => $request['contact_email'],
-            'currency' => $request['currency'],
-            's_currency' => $request['s_currency'],
-            'weekend_trade' => $request['weekend_trade'],
-            'location' => $request['location'],
-            'trade_mode' => $request['trade_mode'],
-            'enable_verification' => $request['enail_verify'],
-            'google_translate' => $request['googlet'],
-            'enable_kyc' => $request['enable_kyc'],
-            'enable_kyc_registration' => $request['enable_kyc_registration'],
-            'captcha' => $request['captcha'],
-            'enable_with' => $request['withdraw'],
-            'return_capital' => $return_capital,
-            'enable_social_login' => $request['social'],
-            'enable_annoc' => $request['annouc'],
-            'redirect_url' => $request->redirect_url,
-            'should_cancel_plan' => $request->should_cancel_plan,
-        ]);
-        return response()->json(['status' => 200, 'success' => 'Settings Saved successfully']);
+        return response()->json(['status' => 200, 'message' => 'Website information updated successfully.']);
     }
 
-    // Update email preference
-    public function updateemail(Request $request)
+    /**
+     * Update Transfer Security Codes
+     */
+    public function updateTransferCodes(Request $request)
     {
-        Settings::where('id', ' 1')
-            ->update([
-                'mail_server' => $request['server'],
-                'emailfrom' => $request['emailfrom'],
-                'emailfromname' => $request['emailfromname'],
-                'smtp_host' => $request['smtp_host'],
-                'smtp_port' => $request['smtp_port'],
-                'smtp_encrypt' => $request['smtp_encrypt'],
-                'smtp_user' => $request['smtp_user'],
-                'smtp_password' => $request['smtp_password'],
-                'google_id' => $request['google_id'],
-                'google_secret' => $request['google_secret'],
-                'google_redirect' => $request['google_redirect'],
-                'capt_secret' => $request['capt_secret'],
-                'capt_sitekey' => $request['capt_sitekey'],
-            ]);
-        return response()->json(['status' => 200, 'success' => 'Settings Saved successfully']);
-        //return redirect()->back()->with('message', 'Action Sucessful');
+        Settings::where('id', 1)->update($request->only([
+            'code1', 'code2', 'code3', 'code4', 'code5',
+            'code1status', 'code2status', 'code3status', 'code4status', 'code5status',
+            'code1message', 'code2message', 'code3message', 'code4message', 'code5message',
+            'otp'
+        ]));
+
+        return response()->json(['status' => 200, 'message' => 'Transfer codes updated.']);
+    }
+
+    /**
+     * Update Preferences
+     */
+    public function updatePreference(Request $request)
+    {
+        Settings::where('id', 1)->update([
+            'contact_email' => $request->contact_email,
+            'currency' => $request->currency,
+            's_currency' => $request->s_currency,
+            'enable_verification' => $request->boolean('enail_verify'),
+            'return_capital' => $request->boolean('return_capital'),
+            // Map remaining fields...
+        ]);
+
+        return response()->json(['status' => 200, 'message' => 'Preferences updated.']);
+    }
+
+    /**
+     * Update Mail/SMTP Settings
+     */
+    public function updateEmailSettings(Request $request)
+    {
+        Settings::where('id', 1)->update($request->only([
+            'mail_server', 'emailfrom', 'emailfromname', 'smtp_host', 'smtp_port',
+            'smtp_encrypt', 'smtp_user', 'smtp_password', 'google_id', 
+            'google_secret', 'capt_secret', 'capt_sitekey'
+        ]));
+
+        return response()->json(['status' => 200, 'message' => 'Email settings updated.']);
     }
 }

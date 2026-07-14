@@ -2,43 +2,48 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Models\Settings;
-use App\Models\Plans;
-use App\Models\User_plans;
-use App\Models\Tp_Transaction;
-use App\Mail\NewRoi;
-use App\Mail\endplan;
-use App\Mail\NewNotification;
-use App\Models\Mt4Details;
-use App\Traits\BinanceApi;
-use App\Traits\Coinpayment;
+use App\Models\{User, Settings, Plans, User_plans, Tp_Transaction, Mt4Details};
+use App\Mail\{NewRoi, endplan, NewNotification};
+use App\Traits\{BinanceApi, Coinpayment};
 use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 class AutoTaskController extends Controller
 {
     use Coinpayment, BinanceApi;
-    /*
-        Automatic toup
-        calculate top up earnings and
-        auto increment earnings after the increment time
-    */
 
+    /*
+        API Version of Auto Task
+        Instead of 'echo', we return JSON status so the frontend 
+        admin dashboard can display the task results.
+    */
     public function autotopup()
     {
-        // automatic roi
-        $this->automaticRoi();
+        try {
+            $this->automaticRoi();
+            $this->checkSubscription();
+            $coinpaymentStatus = $this->queryOrder(); // Assuming this returns status
+            $cpResult = $this->cpaywithcp();
 
-        // check for subscription expiration
-        $this->checkSubscription();
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Automatic tasks completed successfully',
+                'details' => [
+                    'roi_processed' => true,
+                    'subscriptions_checked' => true,
+                    'coinpayment_result' => $cpResult
+                ]
+            ], 200);
 
-        //do auto confirm payments
-        $this->queryOrder();
-        echo "Automatic ROI is working properly \n CoinPayment:";
-        return $this->cpaywithcp();
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Task execution failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-
 
 
     public function checkSubscription()

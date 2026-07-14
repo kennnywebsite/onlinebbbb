@@ -1,152 +1,96 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\CourseCategory;
 use App\Traits\PingServer;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class MembershipController extends Controller
 {
     use PingServer;
-    //
+
     public function showCourses(Request $request)
     {
-
-        $response = $this->fetctApi('/courses', [
-            'value' => $request->searchValue,
-        ]);
+        $response = $this->fetctApi('/courses', ['value' => $request->searchValue]);
         $info = json_decode($response);
 
-        return view('admin.memebership.courses', [
-            'courses' => $info->data->courses,
-            'title' => 'Courses',
-            'categories' => $info->data->categories,
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'courses' => $info->data->courses ?? [],
+                'categories' => $info->data->categories ?? []
+            ]
         ]);
     }
 
     public function addCourse(Request $request)
     {
-
-        // $request->image_url;
-        if (empty($request->image_url) and !$request->hasfile('image')) {
-            return redirect()->back()->with('message', 'Please choose a course image');
-        }
-
-        if ($request->hasfile('image')) {
-            $this->validate($request, [
-                'image' => 'image|mimes:jpg,jpeg,png|max:1000',
-            ]);
-            $file = $request->file('image');
-            $path = $file->store('uploads', 'public');
-        } else {
-            $path = $request->image_url;
-        }
-
-        //check if the course is piad or not
-        $paidCourse = $request->amount != '' ? true : false;
+        $path = $this->handleFileUpload($request);
+        if (!$path) return response()->json(['status' => 'error', 'message' => 'Image required'], 400);
 
         $response = $this->fetctApi('/add-course', [
             'title' => $request->title,
             'amount' => $request->amount,
             'image_url' => $path,
-            'paidCourses' => $paidCourse,
+            'paidCourses' => !empty($request->amount),
             'category' => $request->category,
             'desc' => $request->desc
         ], 'POST');
 
-        //return $response;
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        return $this->apiResponse($response);
     }
 
     public function updateCourse(Request $request)
     {
-        if ($request->image_url == '' and !$request->hasfile('image')) {
-            return redirect()->back()->with('message', 'Please choose a course image');
-        }
-
-        if ($request->hasfile('image')) {
-            $this->validate($request, [
-                'image' => 'image|mimes:jpg,jpeg,png|max:1000',
-            ]);
-            $file = $request->file('image');
-            $path = $file->store('uploads', 'public');
-        } else {
-            $path = $request->image_url;
-        }
-
-        //check if the course is piad or not
-        $paidCourse = $request->amount != '' ? true : false;
+        $path = $this->handleFileUpload($request);
+        if (!$path) return response()->json(['status' => 'error', 'message' => 'Image required'], 400);
 
         $response = $this->fetctApi('/update-course', [
             'course_id' => $request->course_id,
             'title' => $request->title,
             'amount' => $request->amount,
             'image_url' => $path,
-            'paidCourses' => $paidCourse,
+            'paidCourses' => !empty($request->amount),
             'category' => $request->category,
             'desc' => $request->desc
         ], 'POST');
 
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        return $this->apiResponse($response);
     }
 
-    public function deleteCourse($coursId)
+    public function deleteCourse($courseId)
     {
-        $res = $this->fetctApi('/course', [
-            'courseId' => $coursId,
-        ]);
-
+        $res = $this->fetctApi('/course', ['courseId' => $courseId]);
         $info = json_decode($res);
-
-        if (Storage::disk('public')->exists($info->data->course->id)) {
+        
+        if (isset($info->data->course->id)) {
             Storage::disk('public')->delete($info->data->course->id);
         }
 
-        $response = $this->fetctApi("/delete-course/$coursId", [], 'DEL');
-
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        $response = $this->fetctApi("/delete-course/$courseId", [], 'DEL');
+        return $this->apiResponse($response);
     }
-
 
     public function showLessons($id)
     {
         $response = $this->fetctApi("/courses-lessons/$id");
         $info = json_decode($response);
-        //return $info;
-        return view('admin.memebership.lessons', [
-            'lessons' => $info->data->lessons->data,
-            'course' => $info->data->course,
-            'title' => 'Lessons'
+        
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'lessons' => $info->data->lessons->data ?? [],
+                'course' => $info->data->course ?? null
+            ]
         ]);
     }
 
     public function addLesson(Request $request)
     {
-        if ($request->image_url == '' and !$request->hasfile('image')) {
-            return redirect()->back()->with('message', 'Please choose a course image');
-        }
-
-        if ($request->hasfile('image')) {
-            $this->validate($request, [
-                'image' => 'image|mimes:jpg,jpeg,png|max:1000',
-            ]);
-            $file = $request->file('image');
-            $path = $file->store('uploads', 'public');
-        } else {
-            $path = $request->image_url;
-        }
-        if ($request->has('category')) {
-            $cat = $request->category;
-        } else {
-            $cat = null;
-        }
+        $path = $this->handleFileUpload($request);
+        if (!$path) return response()->json(['status' => 'error', 'message' => 'Thumbnail required'], 400);
 
         $response = $this->fetctApi('/add-lesson', [
             'title' => $request->title,
@@ -155,115 +99,42 @@ class MembershipController extends Controller
             'preview' => $request->preview,
             'course_id' => $request->course_id,
             'desc' => $request->desc,
-            'cat' => $cat,
+            'cat' => $request->category,
             'thumbnail' => $path
         ], 'POST');
 
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
-    }
-
-    public function updateLesson(Request $request)
-    {
-        if ($request->image_url == '' and !$request->hasfile('image')) {
-            return redirect()->back()->with('message', 'Please choose a course image');
-        }
-
-        if ($request->hasfile('image')) {
-            $this->validate($request, [
-                'image' => 'image|mimes:jpg,jpeg,png|max:1000',
-            ]);
-            $file = $request->file('image');
-            $path = $file->store('uploads', 'public');
-        } else {
-            $path = $request->image_url;
-        }
-
-        if ($request->has('category')) {
-            $cat = $request->category;
-            $category = $request->category;
-        } else {
-            $cat = null;
-            $category = null;
-        }
-
-        $response = $this->fetctApi('/update-lesson', [
-            'lesson_id' => $request->lesson_id,
-            'title' => $request->title,
-            'length' => $request->length,
-            'videolink' => $request->videolink,
-            'preview' => $request->preview,
-            'course_id' => $request->course_id,
-            'desc' => $request->desc,
-            'cat' => $cat,
-            'course_category_id' =>  $category,
-            'thumbnail' => $path
-        ], 'POST');
-
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        return $this->apiResponse($response);
     }
 
     public function deleteLesson($lessonId)
     {
-        $res = $this->fetctApi('/lesson', [
-            'lessonId' => $lessonId,
-        ]);
-
+        $res = $this->fetctApi('/lesson', ['lessonId' => $lessonId]);
         $info = json_decode($res);
 
-        if (Storage::disk('public')->exists($info->data->lesson->id)) {
+        if (isset($info->data->lesson->id)) {
             Storage::disk('public')->delete($info->data->lesson->id);
         }
 
         $response = $this->fetctApi("/delete-lesson/$lessonId", [], 'DEL');
-
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        return $this->apiResponse($response);
     }
 
-
-
-    public function addCategory(Request $request)
+    // Helper: Centralize File Handling
+    private function handleFileUpload(Request $request)
     {
-        $response = $this->fetctApi('/add-category', [
-            'category' => $request->category,
-        ], 'POST');
-
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
+        if ($request->hasFile('image')) {
+            $request->validate(['image' => 'image|mimes:jpg,jpeg,png|max:1000']);
+            return $request->file('image')->store('uploads', 'public');
+        }
+        return $request->image_url;
     }
 
-    public function deleteCategory($id)
+    // Helper: Standardized JSON Response
+    private function apiResponse($response)
     {
-        $response = $this->fetctApi("/delete-cat/$id", [], 'DEL');
-
-        $respond = $this->backWithResponse($response);
-        return back()->with($respond['type'], $respond['message']);
-    }
-
-
-    public function category()
-    {
-        $response = $this->fetctApi('/categories');
-        $info = json_decode($response);
-
-        return view('admin.memebership.category', [
-            'categories' => $info->data->categories,
-            'title' => 'Course Category'
-        ]);
-    }
-
-
-    public function lessonWithoutCourse(): View
-    {
-        $response = $this->fetctApi('/lessons-without-course');
-        $info = json_decode($response);
-
-        return view('admin.memebership.lessons-without', [
-            'title' => 'Lessons without courses',
-            'lessons' => $info->data->lessons,
-            'categories' => $info->data->categories,
-        ]);
+        if ($response->failed()) {
+            return response()->json(['status' => 'error', 'message' => $response['message'] ?? 'Action failed'], 400);
+        }
+        return response()->json(['status' => 'success', 'message' => $response['message'] ?? 'Action successful']);
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -8,37 +8,61 @@ use App\Models\SettingsCont;
 
 class ManageAssetController extends Controller
 {
-    //
-
-    public function setassetstatus($asset, $status){
+    /**
+     * Set the status of a specific crypto asset (e.g., btc: true/false)
+     */
+    public function setAssetStatus($asset, $status)
+    {
+        // Sanitize: Ensure only valid columns are updated if needed
+        $allowed = ['btc', 'eth', 'usdt', 'ltc', 'bnb', 'xrp', 'ada', 'xlm', 'aave', 'bch', 'link'];
+        
+        if (!in_array($asset, $allowed)) {
+            return response()->json(['status' => 400, 'message' => 'Invalid asset provided.'], 400);
+        }
 
         SettingsCont::where('id', 1)->update([
             $asset => $status,
         ]);
 
-        return redirect()->back()->with('success', "Asset Status $status");
+        return response()->json([
+            'status' => 200, 
+            'message' => "Asset {$asset} status set to {$status}"
+        ]);
     }
 
-    public function useexchange($value){
+    /**
+     * Toggle the global exchange feature
+     */
+    public function useExchange($value)
+    {
         SettingsCont::where('id', 1)->update([
             'use_crypto_feature' => $value,
         ]);
 
-        return response()->json(['status'=> 200, 'success'=> "Action Successful"]);
+        return response()->json([
+            'status' => 200, 
+            'message' => "Exchange feature status updated to: {$value}"
+        ]);
     }
 
-    public function exchangefee(Request $request){
-        if ($request->rate) {
-            $rate = $request->rate;
-        }else {
-            $rate = NULL;
-        }
-
-        SettingsCont::where('id', 1)->update([
-            'fee' => $request->fee,
-            'currency_rate' => $rate
+    /**
+     * Update exchange fees and currency rates
+     */
+    public function exchangeFee(Request $request)
+    {
+        $request->validate([
+            'fee'  => 'required|numeric|min:0',
+            'rate' => 'nullable|numeric|min:0'
         ]);
 
-        return redirect()->back()->with('success', "Exchange fee and Rate Updated");
+        SettingsCont::where('id', 1)->update([
+            'fee'           => $request->fee,
+            'currency_rate' => $request->rate ?? null
+        ]);
+
+        return response()->json([
+            'status' => 200, 
+            'message' => "Exchange fee and Rate Updated successfully"
+        ]);
     }
 }

@@ -1,76 +1,72 @@
 <?php
 
-namespace App\Http\Controllers\Admin\Auth;
+namespace App\Http\Controllers\Api\Admin;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Mail\NewNotification;
 use App\Models\Admin;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 
 class ForgotPasswordController extends Controller
 {
-    public function forgotPassword(){
-        return view('auth.admin-forgot-password',[
-
-        ]);
-    }
-
-    public function sendPasswordRequest(Request $request){
+    /**
+     * Send password reset token to email
+     */
+    public function sendPasswordRequest(Request $request)
+    {
         $request->validate([
             'email' => 'required|email|exists:admins,email'
         ]);
 
-        $token = time();
+        $token = rand(100000, 999999); // Using random 6-digit for better security
 
         $admin = Admin::where('email', $request->email)->first();
         $admin->password_token = $token;
         $admin->save();
 
-        $message = "This is a password reset request from your account. Use $token to reset your password. please ignore if you did not make this request.";
+        $message = "This is a password reset request from your account. Use $token to reset your password. Please ignore if you did not make this request.";
         $subject = "Reset Password Request";
+        
         Mail::to($request->email)->send(new NewNotification($message, $subject, "$admin->firstName $admin->lastName"));
-        return redirect()->route('resetview', $admin->email)
-        ->with('success', 'We just sent you an email containing a token to reset your password');
-    }
 
-    public function resetPassword($email){
-        $user = Admin::where('email', $email)->first();
-        if(!$user){
-            return redirect('/');
-        }
-        return view('auth.admin-reset-pass',[
-            'email'=> $email,
+        return response()->json([
+            'status' => 200, 
+            'message' => 'We have sent a verification token to your email.'
         ]);
     }
 
-    // Validate token
-    public function validateResetPasswordToken(Request $request){
-
+    /**
+     * Validate token and update password
+     */
+    public function resetPassword(Request $request)
+    {
         $request->validate([
-            'email' => 'required|email',
-            'token' => 'required|exists:admins,password_token',
-            'password' => 'required|confirmed',
+            'email' => 'required|email|exists:admins,email',
+            'token' => 'required',
+            'password' => 'required|confirmed|min:6',
         ]);
 
-        $user = Admin::where('email', $request->email)->first();
-        if (!$user) {
-            return redirect()->back()
-            ->with('message', 'This Email does not exist');
+        $admin = Admin::where('email', $request->email)
+            ->where('password_token', $request->token)
+            ->first();
+
+        if (!$admin) {
+            return response()->json([
+                'status' => 400, 
+                'message' => 'Invalid email or token provided.'
+            ], 400);
         }
 
-        if ($user->password_token != $request->token) {
-            return redirect()->back()
-            ->with('message', 'Incorrect token');
-        }
-
-        Admin::where('email', $request->email)->update([
+        $admin->update([
             'password' => Hash::make($request->password),
             'password_token' => NULL,
         ]);
 
-        return redirect()->route('adminloginform')->with('success', 'Password Reset successful, login now');
-
+        return response()->json([
+            'status' => 200, 
+            'message' => 'Password has been reset successfully.'
+        ]);
     }
 }

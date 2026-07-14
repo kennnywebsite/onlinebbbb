@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\User;
+namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\IrsRefund;
@@ -12,7 +12,10 @@ class IrsRefundController extends Controller
     public function index()
     {
         $refund = IrsRefund::where('user_id', Auth::id())->first();
-        return view('user.irs-refund.index', compact('refund'));
+        return response()->json([
+            'status' => 200,
+            'data' => $refund
+        ]);
     }
 
     public function store(Request $request)
@@ -25,16 +28,15 @@ class IrsRefundController extends Controller
             'country' => 'required|string|max:255',
         ]);
 
-        // Check if user already has a pending or approved refund
         $existingRefund = IrsRefund::where('user_id', Auth::id())
             ->whereIn('status', ['pending', 'approved'])
             ->first();
 
         if ($existingRefund) {
-            return back()->with('error', 'You already have a pending or approved refund request.');
+            return response()->json(['message' => 'You already have a pending or approved refund request.'], 400);
         }
 
-        IrsRefund::create([
+        $refund = IrsRefund::create([
             'user_id' => Auth::id(),
             'name' => $request->name,
             'ssn' => $request->ssn,
@@ -44,54 +46,34 @@ class IrsRefundController extends Controller
             'status' => 'pending'
         ]);
 
-        return redirect()->route('irs-refund.filing-id')->with('success', 'Your refund request has been submitted successfully. Please enter your filing ID to proceed.');
-    }
-
-    public function filingId()
-    {
-        $refund = IrsRefund::where('user_id', Auth::id())->first();
-        
-        if (!$refund) {
-            return redirect()->route('irs-refund')->with('error', 'Please submit a refund request first.');
-        }
-
-        if ($refund->filing_id) {
-            return redirect()->route('irs-refund.track')->with('info', 'You have already submitted your filing ID.');
-        }
-
-        return view('user.irs-refund.filing-id', compact('refund'));
+        return response()->json([
+            'message' => 'Request submitted successfully.',
+            'data' => $refund
+        ], 201);
     }
 
     public function updateFilingId(Request $request)
     {
-        $request->validate([
-            'filing_id' => 'required|string|max:255',
-        ]);
+        $request->validate(['filing_id' => 'required|string|max:255']);
 
         $refund = IrsRefund::where('user_id', Auth::id())->first();
 
         if (!$refund) {
-            return back()->with('error', 'No refund request found.');
+            return response()->json(['message' => 'No refund request found.'], 404);
         }
-
         if ($refund->filing_id) {
-            return back()->with('error', 'You have already submitted a filing ID.');
+            return response()->json(['message' => 'Filing ID already submitted.'], 400);
         }
-
         if ($refund->status !== 'pending') {
-            return back()->with('error', 'This refund request is no longer pending.');
+            return response()->json(['message' => 'Request is not pending.'], 400);
         }
-
-        // Check if the filing ID matches the user's irs_filing_id
         if ($request->filing_id !== Auth::user()->irs_filing_id) {
-            return back()->with('error', 'Invalid filing ID. Please check and try again.');
+            return response()->json(['message' => 'Invalid filing ID.'], 422);
         }
 
-        $refund->update([
-            'filing_id' => $request->filing_id
-        ]);
+        $refund->update(['filing_id' => $request->filing_id]);
 
-        return redirect()->route('irs-refund.track')->with('success', 'Filing ID updated successfully. Your refund request is now being processed.');
+        return response()->json(['message' => 'Filing ID updated successfully.']);
     }
 
     public function track()
@@ -99,13 +81,15 @@ class IrsRefundController extends Controller
         $refund = IrsRefund::where('user_id', Auth::id())->first();
         
         if (!$refund) {
-            return redirect()->route('irs-refund')->with('error', 'Please submit a refund request first.');
+            return response()->json(['message' => 'No refund request found.'], 404);
         }
-
         if (!$refund->filing_id) {
-            return redirect()->route('irs-refund.filing-id')->with('error', 'Please submit your filing ID to track your refund status.');
+            return response()->json(['message' => 'Filing ID required to track status.'], 400);
         }
 
-        return view('user.irs-refund.track', compact('refund'));
+        return response()->json([
+            'status' => 200,
+            'data' => $refund
+        ]);
     }
-} 
+}
