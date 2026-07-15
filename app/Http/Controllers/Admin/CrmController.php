@@ -1,93 +1,110 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
 use App\Models\Task;
 use App\Models\Admin;
-use App\Models\User;
-use App\Mail\NewNotification;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Mail\NewNotification;
+use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 
 class CrmController extends Controller
 {
-    public function addTask(Request $request)
+    public function addtask(Request $request)
     {
-        $request->validate([
-            'tasktitle'   => 'required|string',
-            'delegation'  => 'required|exists:admins,id',
-            'start_date'  => 'required|date',
-            'end_date'    => 'required|date',
-            'priority'    => 'required|string',
-        ]);
 
-        $task = Task::create([
-            'title'       => $request->tasktitle,
-            'note'        => $request->note,
-            'designation' => $request->delegation,
-            'start_date'  => $request->start_date,
-            'end_date'    => $request->end_date,
-            'priority'    => $request->priority,
-            'status'      => 'Pending',
-        ]);
+        $task = new Task();
+        $task->title = $request['tasktitle'];
+        $task->note = $request['note'];
+        $task->designation = $request['delegation'];
+        $task->start_date = $request['start_date'];
+        $task->end_date = $request['end_date'];
+        $task->priority = $request['priority'];
+        $task->status = "Pending";
+        $task->save();
 
-        // Notify Admin
-        $admin = Admin::findOrFail($request->delegation);
-        $message = "A new task has been assigned: {$request->tasktitle}. Check your dashboard.";
-        Mail::to($admin->email)->send(new NewNotification($message, "New Task: {$request->tasktitle}", $admin->firstName));
+        //send email notification
+        $mailduser = Admin::where('id', $request->delegation)->first();
+        $message = "This is to inform you that a new task has been assigned to you, Task Title: $request->tasktitle, Start Date: $request->start_date, End Date: $request->end_date, please login to your account to see more.";
+        $subject = "New Task: $request->tasktitle";
+        Mail::to($mailduser->email)->send(new NewNotification($message, $subject, $mailduser->firstName));
 
-        return response()->json(['status' => 200, 'message' => 'Task successfully created and assigned.']);
+        return redirect()->back()
+            ->with('success', 'Task Successfully Created and Assigned!');
     }
 
-    public function updateTask(Request $request, $id)
-    {
-        Task::findOrFail($id)->update([
-            'title'       => $request->tasktitle,
-            'note'        => $request->note,
-            'designation' => $request->delegation,
-            'start_date'  => $request->start_date,
-            'end_date'    => $request->end_date,
-            'priority'    => $request->priority,
-        ]);
 
-        return response()->json(['status' => 200, 'message' => 'Task updated successfully.']);
+    public function updatetask(Request $request)
+    {
+
+        Task::where('id', $request['id'])
+            ->update([
+                'title' => $request['tasktitle'],
+                'note' => $request['note'],
+                'designation' => $request['delegation'],
+                'start_date' => $request['start_date'],
+                'end_date' => $request['end_date'],
+                'priority' => $request['priority'],
+            ]);
+        return redirect()->back()
+            ->with('success', 'Action Successful!');
     }
 
-    public function deleteTask($id)
+    //Delete deposit
+    public function deltask($id)
     {
-        Task::findOrFail($id)->delete();
-        return response()->json(['status' => 200, 'message' => 'Task deleted.']);
+        Task::where('id', $id)->delete();
+        return redirect()->back()
+            ->with('success', 'Task has been deleted!');
     }
 
-    public function markDone($id)
+    public function markdone($id)
     {
-        Task::findOrFail($id)->update(['status' => 'Completed']);
-        return response()->json(['status' => 200, 'message' => 'Task marked as completed.']);
+        Task::where('id', $id)
+            ->update([
+                'status' => "Completed",
+            ]);
+        return redirect()->back()
+            ->with('success', 'Task has been Completed!');
     }
 
-    public function updateUser(Request $request)
+    //Delete deposit
+    public function updateuser(Request $request)
     {
-        User::findOrFail($request->id)->update(['userupdate' => $request->userupdate]);
-        return response()->json(['status' => 200, 'message' => 'Status updated.']);
+        User::where('id', $request->id)
+            ->update([
+                'userupdate' => $request->userupdate,
+            ]);
+        return redirect()->back()
+            ->with('success', 'Status Updated!');
     }
-
+    //Delete deposit
     public function convert($id)
     {
-        User::findOrFail($id)->update(['cstatus' => 'Customer']);
-        return response()->json(['status' => 200, 'message' => 'User converted to customer.']);
+        User::where('id', $id)
+            ->update([
+                'cstatus' => "Customer",
+            ]);
+        return redirect()->back()
+            ->with('success', 'User Converted successfully');
     }
 
     public function assign(Request $request)
     {
-        $request->validate(['user_name' => 'required', 'admin' => 'required']);
-        
-        User::findOrFail($request->user_name)->update(['assign_to' => $request->admin]);
+        User::where('id', $request['user_name'])
+            ->update([
+                'assign_to' => $request['admin'],
+            ]);
 
-        $admin = Admin::findOrFail($request->admin);
-        $message = "A user has been assigned to you. Please login to your dashboard.";
-        Mail::to($admin->email)->send(new NewNotification($message, "New User Assigned", $admin->firstName));
+        $mailduser = Admin::where('id', $request->admin)->first();
+        //send email notification
+        $name = "$mailduser->firstName $mailduser->lastName";
+        $message = "This is to inform you that a user have been assigned to you, please login to your account for more info";
+        $subject = "New User Assigned";
 
-        return response()->json(['status' => 200, 'message' => 'User assigned successfully.']);
+        Mail::to($mailduser->email)->send(new NewNotification($message, $subject, $name));
+        return redirect()->back()->with('success', 'Successfully Assigned User to Admin');
     }
 }

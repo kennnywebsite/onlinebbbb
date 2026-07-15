@@ -1,113 +1,154 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller
 {
-    // Updating Profile Route
+    //Updating Profile Route
     public function updateprofile(Request $request)
     {
-        $request->user()->update($request->only(['name', 'dob', 'phone', 'address']));
-        
-        return response()->json(['status' => 200, 'message' => 'Profile Information Updated Successfully!']);
+        User::where('id', Auth::user()->id)
+            ->update([
+                'name' => $request->name,
+                'dob' => $request->dob,
+                'phone' => $request->phone,
+                'address' => $request->address,
+            ]);
+        return response()->json(['status' => 200, 'success' => 'Profile Information Updated Sucessfully!']);
     }
 
-    // Update account and contact info
+    //update account and contact info
     public function updateacct(Request $request)
     {
-        $request->user()->update([
-            'bank_name'      => $request->bank_name,
-            'account_name'   => $request->account_name,
-            'account_number' => $request->account_no,
-            'swift_code'     => $request->swiftcode,
-            'btc_address'    => $request->btc_address,
-            'eth_address'    => $request->eth_address,
-            'ltc_address'    => $request->ltc_address,
-            'usdt_address'   => $request->usdt_address,
-        ]);
-        
-        return response()->json(['status' => 200, 'message' => 'Withdrawal Info updated Successfully']);
+        User::where('id', Auth::user()->id)
+            ->update([
+                'bank_name' => $request['bank_name'],
+                'account_name' => $request['account_name'],
+                'account_number' => $request['account_no'],
+                'swift_code' => $request['swiftcode'],
+                'btc_address' => $request['btc_address'],
+                'eth_address' => $request['eth_address'],
+                'ltc_address' => $request['ltc_address'],
+                'usdt_address' => $request['usdt_address'],
+            ]);
+        return response()->json(['status' => 200, 'success' => 'Withdrawal Info updated Sucessfully']);
     }
 
-    // Update Password
+    //Update Password
     public function updatepass(Request $request)
     {
         $request->validate([
             'current_password' => 'required',
             'password' => 'required|string|min:6|confirmed',
+            'password_confirmation' => 'required',
         ]);
 
-        if (!Hash::check($request->current_password, $request->user()->password)) {
-            return response()->json(['status' => 400, 'message' => 'Current password does not match!'], 400);
-        }
+        $user = User::find(Auth::user()->id);
 
-        $request->user()->update(['password' => Hash::make($request->password)]);
-        
-        return response()->json(['status' => 200, 'message' => 'Password updated successfully']);
+        if (!Hash::check($request->current_password, $user->password)) {
+            return back()->with('message', 'Current password does not match!');
+        }
+        $user->password = Hash::make($request->password);
+        $user->save();
+        return back()->with('success', 'Password updated successfully');
     }
 
-    // Change Pin
-    public function changepin(Request $request)
-    {
-        $request->validate(['current_password' => 'required', 'pin' => 'required']);
 
-        if (!Hash::check($request->current_password, $request->user()->password)) {
-            return response()->json(['status' => 400, 'message' => 'Password does not match!'], 400);
+    public function changepin(Request $request){
+
+       
+        $user = User::find(Auth::user()->id);
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return back()->with('message', 'Password does not match!');
         }
+        User::where('id',Auth::user()->id)
+        ->update([
+            'pin' => $request->pin,
+           
+        ]);
+   
 
-        $request->user()->update(['pin' => $request->pin]);
-
-        return response()->json(['status' => 200, 'message' => 'Transaction Pin Updated Successfully']);
+        return back()->with('success', 'Transaction Pin Updated Successfully');
     }
 
-    // Update email preference
+    // Update email preference logic
     public function updateemail(Request $request)
     {
-        $request->user()->update([
-            'sendotpemail'     => $request->otpsend,
-            'sendroiemail'     => $request->roiemail,
-            'sendinvplanemail' => $request->invplanemail,
-        ]);
-        
-        return response()->json(['status' => 200, 'message' => 'Email Preference updated']);
+        $user = User::find(Auth::user()->id);
+
+        $user->sendotpemail = $request->otpsend;
+        $user->sendroiemail = $request->roiemail;
+        $user->sendinvplanemail = $request->invplanemail;
+        $user->save();
+        return response()->json(['status' => 200, 'success' => 'Email Preference updated']);
     }
 
-    // Update Profile photo
-    public function updateprofilephoto(Request $request)
-    {
-        $request->validate([
-            'photo' => 'required|image|mimes:jpg,jpeg,png|max:4000',
+
+    // update Profile photo
+    public function updateprofilephoto(Request $request){
+        
+        
+        $this->validate($request, [
+            'photo' => 'mimes:jpg,jpeg,png|max:4000|image',
         ]);
         
-        if ($request->hasFile('photo')) {
-            $file = $request->file('photo');
-            $filename = $this->RandomStringGenerator(6) . time() . '.' . $file->getClientOriginalExtension();
-            
-            // Store file
-            $path = $file->storeAs('public/photos', $filename);
-            
-            // Update user
-            $request->user()->update(['profile_photo_path' => $filename]);
+        
 
-            return response()->json([
-                'status' => 200, 
-                'message' => 'Profile Photo Uploaded Successfully.',
-                'path' => Storage::url($path)
-            ]);
-        }
+        $strtxt = $this->RandomStringGenerator(6);
+        
+        if($request->hasfile('photo')){
 
-        return response()->json(['status' => 400, 'message' => 'No file uploaded'], 400);
+            $document1 = $request->file('photo');
+            $filename1 = $document1->getClientOriginalName();
+            $ext = array_pop(explode(".", $filename1));
+            $whitelist = array('jpeg','jpg','png');
+  
+            if (in_array($ext, $whitelist)) {
+  
+                  $cardname = $strtxt . $filename1 . time();
+                  // save to storage/app/uploads as the new $filename
+                  $path = $document1->storeAs('public/photos', $cardname);
+              
+  
+            } else {
+              return redirect()->back()
+              ->with('message', 'Unaccepted Profile Image Uploaded, try renaming the image file');
+            }
+          
+        //update user
+        User::where('id',Auth::user()->id)
+        ->update([
+            'profile_photo_path' => $cardname,
+           
+        ]);
+      }
+        return redirect()->back()
+            ->with('success', 'Action Sucessful!Profile Photo Uploaded Successfully.');
+        
+        
+        
+        
+    
     }
-
-    private function RandomStringGenerator($n) 
-    { 
-        return substr(str_shuffle(str_repeat("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890", $n)), 0, $n);
-    } 
+   // for front end content management
+   function RandomStringGenerator($n) 
+   { 
+       $generated_string = ""; 
+       $domain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"; 
+       $len = strlen($domain); 
+       for ($i = 0; $i < $n; $i++) 
+       { 
+           $index = rand(0, $len - 1); 
+           $generated_string = $generated_string . $domain[$index]; 
+       } 
+       // Return the random generated string 
+       return $generated_string; 
+   } 
 }

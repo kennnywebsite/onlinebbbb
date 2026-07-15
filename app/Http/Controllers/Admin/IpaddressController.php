@@ -1,60 +1,62 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Ipaddress;
 use App\Models\Settings;
+use Illuminate\Support\Facades\DB;
 
 class IpaddressController extends Controller
 {
-    /**
-     * Get blacklisted IPs as raw JSON
-     */
-    public function getAddresses()
-    {
-        // Return raw collection instead of HTML strings
-        $addresses = Ipaddress::orderByDesc('id')->get();
-        
-        return response()->json([
-            'status' => 200,
-            'data' => $addresses,
-            'message' => 'IPs retrieved successfully'
+    //
+    public function index(){
+        return view('admin.Settings.Ipaddress.ipaddress',[
+            'title'=>'Blacklist IP Address',
+            'settings' => Settings::where('id', '=', '1')->first(),
         ]);
     }
 
-    /**
-     * Add IP address
-     */
-    public function addIpAddress(Request $request)
-    {
-        $request->validate([
-            'ipaddress' => 'required|ip|unique:ipaddresses,ipaddress'
-        ]);
 
-        $ip = Ipaddress::create([
-            'ipaddress' => $request->ipaddress
-        ]);
+    public function getaddress(){
 
-        return response()->json([
-            'status' => 200, 
-            'message' => "IP Address: {$request->ipaddress} blacklisted",
-            'data' => $ip
-        ]);
+        $addresses =  DB::table('ipaddresses')->orderByDesc('id')->get();
+        $allddress = '';
+
+        if (count($addresses)<1) {
+            $allddress = "
+            <tr> 
+                <td colspan='3' class='text-danger'>No Record Added</td>
+            </tr> 
+            ";
+        }else {
+            foreach ($addresses as $key => $address) {
+                $allddress.= "
+                <tr> 
+                    <td>$address->ipaddress</td> 
+                    <td>".\Carbon\Carbon::parse($address->created_at)->toDayDateTimeString()."</td> 
+                    <td>
+                        <a class='btn btn-danger btn-sm' href='javascript:void(0)' id='$address->id' onclick='deleteip(this.id)' role='button'>
+                            Delete
+                        </a>
+                    </td> 
+                </tr> 
+                ";
+            }
+        }
+        
+        return response()->json(['status'=>200, 'data'=>$allddress, 'message'=>'Action successful!']);
+    }
+    public function addipaddress(Request $request){
+        $addip = new Ipaddress();
+        $addip->ipaddress = $request->ipaddress;
+        $addip->save();
+        return response()->json(['status' => 200, 'success' => "IP Address: $request->ipaddress blacklisted"]);
     }
 
-    /**
-     * Delete IP address
-     */
-    public function deleteIp($id)
-    {
-        $ip = Ipaddress::findOrFail($id);
-        $ip->delete();
-        
-        return response()->json([
-            'status' => 200, 
-            'message' => 'IP Address deleted'
-        ]);
+    public function deleteip($id){
+        Ipaddress::where('id', $id)->delete();
+        return response()->json(['status' => 200, 'success' => "IP Address deleted"]);
     }
 }

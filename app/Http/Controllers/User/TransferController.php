@@ -90,30 +90,20 @@ class TransferController extends Controller
         ]);
     }
 
-    /**
-     * API Version of renewSignalSub
-     */
+
     public function renewSignalSub()
     {
-        $user = Auth::user();
-        
+        $user = User::find(Auth::user()->id);
         $response = $this->fetctApi('/subscription', [
-            'id' => $user->id
+            'id' => auth()->user()->id
         ]);
-        
         $res = json_decode($response);
-        if (!$res || !isset($res->data)) {
-            return response()->json(['status' => 500, 'message' => 'Failed to fetch subscription data'], 500);
-        }
-        
         $sub = $res->data;
 
         $responseSt = $this->fetctApi('/signal-settings');
         $info = json_decode($responseSt);
         $settings = $info->data->settings;
 
-        // Determine amount based on plan
-        $amount = 0;
         if ($sub->subscription == 'Monthly') {
             $amount = $settings->signal_monthly_fee;
         } elseif ($sub->subscription == 'Quarterly') {
@@ -122,34 +112,19 @@ class TransferController extends Controller
             $amount = $settings->signal_yearly_fee;
         }
 
-        // Check funds
-        if ($user->account_bal < floatval($amount)) {
-            return response()->json([
-                'status' => 400, 
-                'message' => 'Insufficient funds to perform this operation'
-            ], 400);
+        if ($user->account_bal <  floatval($amount)) {
+            return redirect()->back()->with('message', 'Your have insufficient funds in your account balance to perform this operation');
         }
 
-        // Perform renewal
-        $renew = $this->fetctApi('/renew-subscription', [
+        $renew =  $this->fetctApi('/renew-subscription', [
             'id' => $user->id,
         ], 'POST');
 
-        // Check if the external API call was successful
-        // Assuming $renew is an Illuminate\Http\Client\Response
         if ($renew->successful()) {
-            $user->account_bal -= floatval($amount);
+            $user->account_bal = $user->account_bal - floatval($amount);
             $user->save();
-            
-            return response()->json([
-                'status' => 200,
-                'message' => 'Your subscription has been renewed successfully.'
-            ]);
+            return redirect()->back()->with('success', 'Your subscription have been renewed successfully.');
         }
-
-        return response()->json([
-            'status' => 500,
-            'message' => 'Something went wrong while communicating with the subscription server.'
-        ], 500);
+        return redirect()->back()->with('Something went wrong');
     }
 }

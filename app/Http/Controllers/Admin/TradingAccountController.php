@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\NewNotification;
 use App\Models\Mt4Details;
 use App\Models\Settings;
 use App\Models\User;
 use App\Traits\PingServer;
-use App\Mail\NewNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
@@ -15,40 +15,36 @@ class TradingAccountController extends Controller
 {
     use PingServer;
 
-    /**
-     * Get Provisioned Trading Accounts
-     */
     public function tradingAccounts()
     {
         $response = $this->fetctApi('/trading-accounts');
         $apisettings = $this->fetctApi('/settings');
+
+        $amountPerSlot = $apisettings['data']['amount_per_slot'];
         $accounts = $this->fetctApi('/master-account');
 
-        return response()->json([
-            'status' => 200,
-            'data' => [
-                'accounts' => $response['data'] ?? [],
-                'amountPerSlot' => $apisettings['data']['amount_per_slot'] ?? 0,
-                'masters' => $accounts['data'] ?? [],
-            ]
+        return view('admin.subscription.tradingAccounts', [
+            'title' => 'Provisioned Trading accounts',
+            'data' => $response['data'],
+            'amountPerSlot' => $amountPerSlot,
+            'masters' => $accounts['data'],
         ]);
     }
 
-    /**
-     * Renew Account
-     */
+
     public function renewAccount(Request $request)
     {
         $response = $this->fetctApi('/renew-account', [
             'account' => $request->account_id,
         ], 'POST');
 
-        return $this->handleExternalResponse($response);
+        if ($response->failed()) {
+            return redirect()->back()->with('message', $response['message']);
+        }
+
+        return redirect()->back()->with('success', $response['message']);
     }
 
-    /**
-     * Create Subscriber Account
-     */
     public function createSubscriberAccount(Request $request)
     {
         $response = $this->fetctApi('/create-sub-account', [
@@ -58,28 +54,29 @@ class TradingAccountController extends Controller
             'name' => $request->name,
             'leverage' => $request->leverage,
             'account_type' => $request->acntype,
-            'baseCurrency' => $request->currency ?? 'USD',
+            'baseCurrency' => $request->currency ? $request->currency : 'USD',
         ], 'POST');
 
-        if ($response->successful() && $request->has('mt4id')) {
-            $this->confirmsub($request->mt4id);
+        if ($response->failed()) {
+            return redirect()->back()->with('message', $response['message']);
         }
 
-        return $this->handleExternalResponse($response);
+        if ($request->has('mt4id')) {
+            $this->confirmsub($request->mt4id);
+        }
+        return redirect()->back()->with('success', $response['message']);
     }
 
-    /**
-     * Delete Subscriber Account
-     */
+
     public function deleteSubAccount($id)
     {
-        $response = $this->fetctApi('/delete-sub-account/' . $id);
-        return $this->handleExternalResponse($response);
+        $response = $this->fetctApi('/delete-sub-account' . '/' . $id);
+        if ($response->failed()) {
+            return redirect()->back()->with('message', $response['message']);
+        }
+        return redirect()->back()->with('success', $response['message']);
     }
 
-    /**
-     * Copy Trade Action
-     */
     public function copyTrade(Request $request)
     {
         $response = $this->fetctApi('/copytrade', [
@@ -87,54 +84,51 @@ class TradingAccountController extends Controller
             'master_account_id' => $request->master,
         ], 'POST');
 
-        return $this->handleExternalResponse($response);
+        if ($response->failed()) {
+            return redirect()->back()->with('message', $response['message']);
+        }
+        return redirect()->back()->with('success', $response['message']);
     }
 
-    /**
-     * Deployment Action
-     */
+
     public function deployment($id, $deployment)
     {
         $response = $this->fetctApi('/deployment', [
             'account' => $id,
             'deploy_type' => $deployment,
         ], 'POST');
-
-        return $this->handleExternalResponse($response);
-    }
-
-    /**
-     * Helper to return standard API response based on PingServer response
-     */
-    private function handleExternalResponse($response)
-    {
         if ($response->failed()) {
-            return response()->json(['status' => 'error', 'message' => $response['message'] ?? 'Action failed'], 400);
+            return redirect()->back()->with('message', $response['message']);
         }
-        return response()->json(['status' => 'success', 'message' => $response['message'] ?? 'Action successful']);
+        return redirect()->back()->with('success', $response['message']);
     }
 
-    /**
-     * Confirm Subscription (Internal DB update)
-     */
-    public function confirmsub($id)
+
+    public function confirmsub($id): void
     {
+        //get the sub details
         $sub = Mt4Details::find($id);
-        $user = User::find($sub->client_id);
+        //get user
+        $user = User::where('id', $sub->client_id)->first();
 
-        $durations = ['Monthly' => 1, 'Quaterly' => 4, 'Yearly' => 12];
-        $months = $durations[$sub->duration] ?? 1;
-        
-        $end_at = now()->addMonths($months);
-        $sub->update([
-            'start_date' => now(),
-            'end_date' => $end_at,
-            'reminded_at' => $end_at->subDays(10),
-            'status' => 'Active'
-        ]);
+        if ($sub->duration == 'Monthly') {
+            $end_at = now()->addMonths(1);
+        } elseif ($sub->duration == 'Quaterly') {
+            $end_at = now()->addMonths(4);
+        } elseif ($sub->duration == 'Yearly') {
+            $end_at = now()->addYears(1);
+        }
+        $remindAt = $end_at->subDays(10);
 
-        $settings = Settings::first();
-        $message = "{$user->name}, your trading account management request has been processed. Thank you for trusting {$settings->site_name}";
+        $sub->start_date = now();
+        $sub->end_date =  $end_at;
+        $sub->reminded_at = $remindAt;
+        $sub->status = 'Active';
+        $sub->save();
+
+
+        $settings = Settings::where('id', '=', '1')->first();
+        $message = "$user->name, This is to inform you that your trading account management request has been reviewed and processed. Thank you for trusting $settings->site_name";
         Mail::to($user->email)->send(new NewNotification($message, 'Subscription Account Started!', $user->name));
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -8,24 +8,35 @@ use Illuminate\Auth\Events\Verified;
 
 class EmailVerificationController extends Controller
 {
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
     public function __construct()
     {
-        $this->middleware('auth:sanctum');
+        $this->middleware('auth');
         $this->middleware('throttle:6,1')->only('verify', 'resend');
     }
     
     /**
-     * Check if email is verified
+     * Display the email verification notice.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
      */
-    public function status(Request $request)
+    public function show(Request $request)
     {
-        return response()->json([
-            'verified' => $request->user()->hasVerifiedEmail()
-        ]);
+        return $request->user()->hasVerifiedEmail()
+            ? redirect()->route('dashboard')
+            : view('auth.verify-email');
     }
     
     /**
-     * Verify the email with the code.
+     * Verify the email with the given code.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function verify(Request $request)
     {
@@ -36,38 +47,33 @@ class EmailVerificationController extends Controller
         $user = $request->user();
         
         if ($user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified.'], 400);
+            return redirect()->route('dashboard');
         }
         
         if ($user->verifyEmailWithCode($request->verification_code)) {
             event(new Verified($user));
             
-            return response()->json([
-                'status'  => 200,
-                'message' => 'Your email has been verified successfully.'
-            ]);
+            return redirect()->route('dashboard')->with('verified', true)
+                ->with('success', 'Your email has been verified successfully.');
         }
         
-        return response()->json([
-            'status'  => 422,
-            'message' => 'The verification code is invalid or has expired.'
-        ], 422);
+        return back()->with('message', 'The verification code is invalid or has expired.');
     }
     
     /**
      * Resend the email verification notification.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function resend(Request $request)
     {
         if ($request->user()->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified.'], 400);
+            return redirect()->route('dashboard');
         }
         
         $request->user()->sendEmailVerificationNotification();
         
-        return response()->json([
-            'status'  => 200,
-            'message' => 'Verification code sent successfully!'
-        ]);
+        return back()->with('status', 'Verification code sent!');
     }
-}
+} 

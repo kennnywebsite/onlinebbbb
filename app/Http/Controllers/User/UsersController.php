@@ -2,87 +2,110 @@
 
 namespace App\Http\Controllers\User;
 
+use App\Models\User;
+use App\Models\Settings;
+use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
-use App\Models\{User, Settings};
 use App\Mail\NewNotification;
-use Illuminate\Support\Facades\{Auth, Mail, Validator};
-
+use Illuminate\Support\Facades\Mail;
+use Session;
 class UsersController extends Controller
 {
-    // API: Add username
-    public function addusername(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'username' => ['required', 'unique:users,username'],
-        ]);
 
-        if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+  public function verifyemail()
+  {
+    return view('auth.verify-email', [
+      'title' => 'Verify Your email address',
+    ]);
+  }
+  public function addusername(Request $request)
+  {
+    Validator::make($request, [
+      'username' => ['required', 'unique:users,username'],
+    ])->validate();
+
+    User::where('id', Auth::user()->id)->update([
+      'username' => $request['username'],
+    ]);
+    return redirect()->route('dashboard');
+  }
+
+  //send contact message to admin email
+  public function sendcontact(Request $request)
+  {
+
+    $settings = Settings::where('id', '1')->first();
+
+    $message = "$request->message";
+    $subject = "Inquiry from $request->name with email $request->email";
+
+
+    Mail::to($settings->contact_email)->send(new NewNotification($message, $subject, 'Admin'));
+
+    return redirect()->back()
+      ->with('success', ' Your message was sent successfully!');
+  }
+
+
+  //Get downlines level
+  public function getdownlines($array, $parent = 0, $level = 0)
+  {
+    $referedMembers = '';
+    foreach ($array as $entry) {
+      if ($entry->ref_by == $parent) {
+
+        if ($level == 0) {
+          $levelQuote = "Direct referral";
+        } else {
+          $levelQuote = "Indirect referral level $level";
         }
 
-        $user = Auth::user();
-        $user->update(['username' => $request->username]);
+        $referedMembers .= "
+                  <tr>
+                  <td> $entry->name $entry->l_name </td> 
+                  <td> $levelQuote </td>" .
+          '<td>' . $this->getUserParent($entry->id) . '</td>' .
+          '<td>' . $this->getUserStatus($entry->id) . '</td>
+                  <td>' . $this->getUserRegDate($entry->id) . '</td>
+                  </tr>';
 
-        return response()->json(['status' => 'success', 'message' => 'Username updated successfully.']);
+        $referedMembers .= $this->getdownlines($array, $entry->id, $level + 1);
+      }
+
+      if ($level == 6) {
+        break;
+      }
     }
+    return $referedMembers;
+  }
 
-    // API: Send contact message
-    public function sendcontact(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required',
-            'email' => 'required|email',
-            'message' => 'required'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
-        }
-
-        $settings = Settings::where('id', '1')->first();
-        $subject = "Inquiry from $request->name with email $request->email";
-
-        Mail::to($settings->contact_email)->send(new NewNotification($request->message, $subject, 'Admin'));
-
-        return response()->json(['status' => 'success', 'message' => 'Your message was sent successfully!']);
+  //Get user Parent
+  function getUserParent($id)
+  {
+    $user = User::where('id', $id)->first();
+    $parent = User::where('id', $user->ref_by)->first();
+    if ($parent) {
+      return "$parent->name $parent->l_name";
+    } else {
+      return "null";
     }
+  }
 
-    // API: Get Downlines as JSON (Instead of raw HTML rows)
-    public function getdownlines(Request $request)
-    {
-        $user = Auth::user();
-        $allUsers = User::all();
-        
-        // Return a clean array structure
-        return response()->json([
-            'data' => $this->formatDownlines($allUsers, $user->id)
-        ]);
-    }
+  //Get user status
+  function getUserStatus($id)
+  {
+    $user = User::where('id', $id)->first();
 
-    private function formatDownlines($array, $parent = 0, $level = 0)
-    {
-        $results = [];
-        if ($level > 6) return $results;
+    return $user->status;
+  }
 
-        foreach ($array as $entry) {
-            if ($entry->ref_by == $parent) {
-                $results[] = [
-                    'name' => $entry->name . ' ' . $entry->l_name,
-                    'level' => ($level == 0) ? "Direct referral" : "Indirect referral level $level",
-                    'parent' => $this->getUserParentName($entry->ref_by),
-                    'status' => $entry->status,
-                    'registered_at' => $entry->created_at,
-                    'children' => $this->formatDownlines($array, $entry->id, $level + 1)
-                ];
-            }
-        }
-        return $results;
-    }
+  //Get User Registration Date
+  function getUserRegDate($id)
+  {
+    $user = User::where('id', $id)->first();
 
-    private function getUserParentName($id)
-    {
-        $parent = User::find($id);
-        return $parent ? "{$parent->name} {$parent->l_name}" : "None";
-    }
+    return $user->created_at;
+  }
 }

@@ -1,109 +1,98 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\User;
+
+
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Settings;
-use App\Models\User_plans;
+use App\Models\Plans;
 use App\Models\Tp_Transaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Mail\NewNotification;
+use App\Models\User_plans;
 use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 
 class UserInvPlanController extends Controller
 {
-    // Apply for loan (API Version)
-    public function loan(Request $request)
-    {
-        $request->validate([
-            'income'   => 'required',
-            'purpose'  => 'required',
-            'duration' => 'required',
-            'facility' => 'required',
-        ]);
 
-        $user = Auth::user();
-        
-        // Note: Ensure $plan_price and $end_at are defined based on your logic
-        $plan_price = $request->amount; 
-        $end_at = Carbon::now()->addMonths($request->duration);
 
+
+    public function loan(Request $request){
+        //get user
+        $user=User::where('id',Auth::user()->id)->first();
+        //get plan
+    
+    
+        //save user laon
         $userplanid = DB::table('user_plans')->insertGetId([
-            'user'         => $user->id,
-            'amount'       => $plan_price,
-            'income'       => $request->income,
-            'purpose'      => $request->purpose,
-            'duration'     => $request->duration,
-            'facility'     => $request->facility,
-            'active'       => 'Pending',
-            'inv_duration' => $request->duration,
-            'expire_date'  => $end_at,
-            'activated_at' => Carbon::now(),
-            'last_growth'  => Carbon::now(),
-            'created_at'   => Carbon::now(),
-            'updated_at'   => Carbon::now(),
+            
+            'user' => Auth::user()->id,
+            'amount' => $plan_price,
+            'income'=> $request['income'],
+            'purpose'=> $request['purpose'],
+            'duration'=>$request['duration'],
+            'facility' => $request['facility'],
+            'active' => 'Pending',
+            'inv_duration'=>$request['duration'],
+            'expire_date' => $end_at,
+            'activated_at' => \Carbon\Carbon::now(),
+            'last_growth' => \Carbon\Carbon::now(),
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
         ]);
 
-        User::where('id', $user->id)->update([
-            'user_plan'  => $userplanid,
-            'entered_at' => Carbon::now(),
+        User::where('id',Auth::user()->id)
+        ->update([
+          
+          'user_plan' => $userplanid,
+          'entered_at'=>\Carbon\Carbon::now(),
         ]);
 
-        $settings = Settings::where('id', '=', '1')->first();
-        $message = "This is to inform you that {$user->name} just applied for a loan plan for {$request->purpose}";
-        $subject = "Loan Application by {$user->name}";
-        
-        if ($settings) {
-            Mail::to($settings->contact_email)->send(new NewNotification($message, $subject, 'Admin'));
-        }
+        //send notification
+        $settings=Settings::where('id', '=', '1')->first();
+        $message = "This is to inform you that $user->name just applied for a loan plan for $request->purpose";
+        $subject ="Loan Application by $user->name ";
+        Mail::to($settings->contact_email)->send(new NewNotification($message, $subject, 'Admin'));
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'You have successfully applied for a loan. Your loan is currently pending.'
-        ], 201);
+        return redirect()->back()
+          ->with('success', "You have successfully applied for a loan your laon is currently pending, you will be contacted soon.");
     }
 
-    // Cancel Plan (API Version)
-    public function cancelPlan($plan_id)
+    public function cancelPlan($plan)
     {
-        $plan = User_plans::find($plan_id);
-
-        if (!$plan) {
-            return response()->json(['message' => 'Plan not found'], 404);
-        }
-
-        if ($plan->user !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
+        $plan = User_plans::find($plan);
         $plan->active = 'cancelled';
         $plan->save();
 
-        // Credit the user
-        $user = Auth::user();
-        $user->account_bal += $plan->amount;
-        $user->save();
+        // credit the user his capital
+        User::where('id', $plan->user)
+            ->update([
+                'account_bal' => Auth::user()->account_bal + $plan->amount,
+            ]);
 
-        // Transaction history
-        $th = new Tp_Transaction();
-        $th->plan   = $plan->dplan->name ?? 'N/A';
-        $th->user   = $plan->user;
+        //save to transactions history
+        $th = new Tp_transaction();
+        $th->plan = $plan->dplan->name;
+        $th->user = $plan->user;
         $th->amount = $plan->amount;
-        $th->type   = "Investment capital for cancelled plan";
+        $th->type = "Investment capital for cancelled plan";
         $th->save();
 
-        // Email
-        $planName = $plan->dplan->name ?? 'Investment';
-        $message  = "You have successfully cancelled your $planName plan.";
-        Mail::to($user->email)->send(new NewNotification($message, 'Investment Plan Cancelled', $user->name));
+        // Send a mail to the user informing them of their plan cancellation
+        $planName = $plan->dplan->name;
+        $message = "You have succesfully cancelled your $planName plan and your investment capital have been credited to your account,  If this is a mistake, please contact us immediately to reactivate it for you.";
+        Mail::to(Auth::user()->email)->send(new NewNotification($message, 'Invsetment Plan Cancelled', Auth::user()->name));
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Plan cancelled successfully'
-        ]);
+        return back()->with('success', 'Plan cancelled successfully');
     }
+
+
+
+      //Apply for loan
+    
 }

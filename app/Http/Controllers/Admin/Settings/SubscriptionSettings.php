@@ -1,54 +1,31 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin\Settings;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Settings;
 
-class SubscriptionSettingsController extends Controller
+class SubscriptionSettings extends Controller
 {
-    /**
-     * Get subscription settings for the dashboard
-     */
-    public function index()
-    {
-        $settings = Settings::first();
-        
-        return response()->json([
-            'status' => 200,
-            'data' => [
-                'monthly_fee'          => $settings->monthlyfee,
-                'quarterly_fee'        => $settings->quarterlyfee,
-                'yearly_fee'           => $settings->yearlyfee,
-                'subscription_service' => $settings->subscription_service,
-            ]
+     // Return view
+     public function index(Request $request){
+        return view('admin.Settings.SubscriptionSettings.show',[
+            'title'=>'Subscription settings',
+            'settings' => Settings::where('id', '=', '1')->first(),
         ]);
     }
     
-    /**
-     * Update Subscription Fees
-     */
-    public function updateSubFee(Request $request)
-    {
-        $request->validate([
-            'id'                   => 'required|exists:settings,id',
-            'monthlyfee'           => 'required|numeric|min:0',
-            'quaterlyfee'          => 'required|numeric|min:0',
-            'yearlyfee'            => 'required|numeric|min:0',
-            'subscription_service' => 'required|string',
-        ]);
+    //Update Subscription Fees
+    public function updatesubfee(Request $request){
         
-        Settings::where('id', $request->id)->update([
-            'monthlyfee'           => $request->monthlyfee,
-            'quarterlyfee'         => $request->quaterlyfee,
-            'yearlyfee'            => $request->yearlyfee,
-            'subscription_service' => $request->subscription_service,
+        Settings::where('id', $request['id'])
+        ->update([
+            'monthlyfee'=>$request['monthlyfee'],
+            'quarterlyfee'=>$request['quaterlyfee'],
+            'yearlyfee'=>$request['yearlyfee'],
+            'subscription_service'=>$request['subscription_service'],
         ]);
-
-        return response()->json([
-            'status'  => 200, 
-            'message' => 'Subscription Settings Saved successfully'
-        ]);
+        return response()->json(['status' => 200, 'success' => 'Subscription Settings Saved successfully']);
     }
 }

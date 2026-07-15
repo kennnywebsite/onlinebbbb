@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SettingsCont;
@@ -17,23 +17,25 @@ class SignalProvderController extends Controller
     public function tradeSignals(Request $request)
     {
         $page = $request->query('page', 1);
+
         $response = $this->fetctApi('/trading-signals?page=' . $page);
         $info = json_decode($response);
 
-        return response()->json([
-            'status' => 200,
-            'data' => $info->data->signals ?? []
+        return view('admin.signals.tradeSignals', [
+            'title' => 'Trading Signals',
+            'signals' => $info->data->signals,
         ]);
     }
+
 
     public function settings()
     {
         $response = $this->fetctApi('/signal-settings');
         $info = json_decode($response);
 
-        return response()->json([
-            'status' => 200,
-            'data' => $info->data->settings ?? null
+        return view('admin.signals.signalSettings', [
+            'title' => 'Signals Settings',
+            'signalSettings' => $info->data->settings,
         ]);
     }
 
@@ -41,29 +43,46 @@ class SignalProvderController extends Controller
     {
         $response = $this->fetctApi('/signal-subscribers');
         if ($response->failed()) {
-            return response()->json(['status' => 'error', 'message' => $response['message'] ?? 'Failed'], 400);
+            return redirect()->back()->with('message', $response['message']);
         }
-        
         $info = json_decode($response);
-        return response()->json(['status' => 200, 'data' => $info->data->subscribers ?? []]);
+        return view('admin.signals.subscribers', [
+            'title' => 'Subscribers',
+            'subscribers' => $info->data->subscribers,
+        ]);
     }
+
 
     public function addSignals(Request $request)
     {
-        $response = $this->fetctApi('/post-signals', $request->all(), 'POST');
-        return $this->apiResponse($response);
+        $response = $this->fetctApi('/post-signals', [
+            'direction' => $request->direction,
+            'pair' => $request->pair,
+            'price' => $request->price,
+            'tp1' => $request->tp1,
+            'tp2' => $request->tp2,
+            'sl1' => $request->sl1,
+        ], 'POST');
+
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
+
 
     public function publishSignals($signal)
     {
+
         $response = $this->fetctApi("/publish-signals/$signal");
         $info = json_decode($response);
 
-        if ($response->successful() && !isset($info->error)) {
-            Notification::send($info->data->chat_id, new PostForexSignal($info->data->message));
+        if ($info->error) {
+            return redirect()->back()->with('message', $response['message']);
         }
 
-        return $this->apiResponse($response);
+        //send to telegram
+        Notification::send($info->data->chat_id, new PostForexSignal($info->data->message));
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
 
     public function updateResult(Request $request)
@@ -73,24 +92,35 @@ class SignalProvderController extends Controller
             'result' => $request->result
         ], 'POST');
 
-        if ($response->successful()) {
-            $info = json_decode($response);
-            Notification::send($info->data->chat_id, new UpdateForexSignalResult($info->data->message));
+        if ($response->failed()) {
+            return redirect()->back()->with('message', $response['message']);
         }
+        $info = json_decode($response);
 
-        return $this->apiResponse($response);
+        //send to telegram
+        Notification::send($info->data->chat_id, new UpdateForexSignalResult($info->data->message));
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
 
     public function deleteSignal($signal)
     {
         $response = $this->fetctApi("/delete-signal/$signal");
-        return $this->apiResponse($response);
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
+
 
     public function saveSettings(Request $request)
     {
         $settings = SettingsCont::find(1);
-        $website = url('/get-started');
+
+        if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+            $link = "https";
+        } else {
+            $link = "http";
+        }
+        $website = $link . '://' . $_SERVER['HTTP_HOST'] . '/get-started';
 
         $response = $this->fetctApi("/save-signal-settings", [
             'website' => $website,
@@ -101,37 +131,27 @@ class SignalProvderController extends Controller
             'telegram_bot_api' => $request->telegram_bot_api
         ], 'PUT');
 
-        if ($response->successful() && $settings) {
-            $settings->update(['telegram_bot_api' => $request->telegram_bot_api]);
+        if ($response->successful()) {
+            $settings->telegram_bot_api = $request->telegram_bot_api;
+            $settings->save();
         }
-
-        return $this->apiResponse($response);
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
+
 
     public function getChatId()
     {
-        return $this->apiResponse($this->fetctApi("/chat-id"));
+        $response = $this->fetctApi("/chat-id");
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
 
     public function deleteChatId()
     {
-        return $this->apiResponse($this->fetctApi("/delete-id"));
-    }
+        $response = $this->fetctApi("/delete-id");
 
-    /**
-     * Unified response handler for API
-     */
-    private function apiResponse($response)
-    {
-        if ($response->failed()) {
-            return response()->json([
-                'status' => 'error', 
-                'message' => $response['message'] ?? 'Action failed'
-            ], 400);
-        }
-        return response()->json([
-            'status' => 'success', 
-            'message' => $response['message'] ?? 'Action successful'
-        ]);
+        $respond = $this->backWithResponse($response);
+        return redirect()->back()->with($respond['type'], $respond['message']);
     }
 }

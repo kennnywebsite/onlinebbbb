@@ -1,74 +1,67 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Kyc;
-use App\Mail\NewNotification;
-use App\Helpers\NotificationHelper;
 use Illuminate\Http\Request;
+use App\Models\User;
+use App\Mail\NewNotification;
+use App\Models\Kyc;
+use App\Helpers\NotificationHelper;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class KycController extends Controller
 {
-    /**
-     * Process KYC application via API
-     */
+
     public function processKyc(Request $request)
     {
-        $request->validate([
-            'kyc_id' => 'required|exists:kycs,id',
-            'action' => 'required|in:Accept,Reject',
-            'message' => 'required|string',
-            'subject' => 'required|string',
-        ]);
+        $application = Kyc::find($request->kyc_id);
+        $user = User::where('id', $application->user_id)->first();
 
-        $application = Kyc::findOrFail($request->kyc_id);
-        $user = User::findOrFail($application->user_id);
-
-        if ($request->action === 'Accept') {
-            $user->update(['account_verify' => 'Verified']);
-            $application->update(['status' => 'Verified']);
+        // will use API key
+        if ($request->action == 'Accept') {
+            User::where('id', $user->id)
+                ->update([
+                    'account_verify' => 'Verified',
+                ]);
+            $application->status = "Verified";
+            $application->save();
             
+            // Create notification for approved KYC
             NotificationHelper::create(
                 $user,
-                'Your KYC verification has been approved. Your account is now fully verified.',
+                'Your KYC verification has been reviewed and approved. Your account is now fully verified.',
                 'KYC Verification Approved',
                 'success',
                 'check-circle',
-                '/account-verify' // API-friendly route
+                route('account.verify')
             );
         } else {
-            // Delete images
-            if (Storage::disk('public')->exists($application->frontimg)) {
+            if (Storage::disk('public')->exists($application->frontimg) and Storage::disk('public')->exists($application->backimg)) {
                 Storage::disk('public')->delete($application->frontimg);
-            }
-            if (Storage::disk('public')->exists($application->backimg)) {
                 Storage::disk('public')->delete($application->backimg);
             }
 
-            $user->update(['account_verify' => 'Rejected']);
+            // Update the user verification status
+            $user->account_verify = 'Rejected';
+            $user->save();
             
+            // Create notification for rejected KYC
             NotificationHelper::create(
                 $user,
-                'Your KYC verification was not approved. Please review requirements and re-submit.',
+                'Your KYC verification was not approved. Please review the requirements and submit new documents.',
                 'KYC Verification Rejected',
                 'danger',
                 'x-circle',
-                '/account-verify'
+                route('account.verify')
             );
             
+            // delete the application form database so user can resubmit application
             $application->delete();
         }
 
-        // Send Email
         Mail::to($user->email)->send(new NewNotification($request->message, $request->subject, $user->name));
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'KYC processing action completed successfully.'
-        ]);
+        return redirect()->route('kyc')->with('success', 'Action Sucessful!');
     }
 }
