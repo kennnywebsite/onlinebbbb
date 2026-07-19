@@ -5,20 +5,30 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class CheckUserStatus
 {
     public function handle(Request $request, Closure $next)
     {
-        // Allow access to login pages and any admin route
-        if ($request->is('login') || $request->is('admin/auth/*') || Auth::guard('admin')->check()) {
+        Log::info('CheckUserStatus: Checking path: ' . $request->path());
+
+        // Skip middleware if admin
+        if (Auth::guard('admin')->check()) {
+            Log::info('CheckUserStatus: Admin detected, skipping status check.');
             return $next($request);
         }
 
-        if (Auth::guard('web')->check() && Auth::guard('web')->user()->status !== 'active') {
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            return redirect()->route('login')->with('message', 'Your account is inactive.');
+        // Check Web user status
+        if (Auth::guard('web')->check()) {
+            $user = Auth::guard('web')->user();
+            Log::info('CheckUserStatus: Checking web user status for ID: ' . $user->id);
+            
+            if ($user->status !== 'active') {
+                Log::warning('CheckUserStatus: User inactive. Logging out.');
+                Auth::guard('web')->logout();
+                return redirect()->route('login');
+            }
         }
 
         return $next($request);
