@@ -31,15 +31,16 @@ use App\Http\Controllers\Admin\TradingPaymentController;
 use App\Http\Controllers\Admin\TransactionHistoryController;
 use Illuminate\Support\Facades\Route;
 
+
 Route::prefix('auth')->group(function () {
     Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
     Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
     Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
     
-    // Use 'isadmin' here which points to App\Http\Middleware\EnsureIsAdmin
+    // Use BOTH to be absolutely sure
     Route::get('dashboard', [HomeController::class, 'index'])
         ->name('admin.dashboard')
-        ->middleware('isadmin'); 
+        ->middleware(['auth:admin', 'isadmin']); 
 });
 
 // Two Factor controller for Admin.

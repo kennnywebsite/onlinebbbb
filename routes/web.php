@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Artisan;
 */
 
 // External route files
+// Note: Ensure your admin.php, user.php, etc., use 'auth:admin' for admin routes
 require __DIR__ . '/home.php';
 require __DIR__ . '/admin.php';
 require __DIR__ . '/user.php';
@@ -39,9 +40,9 @@ Route::post('/reset-password', [NewPasswordController::class, 'store'])
 
 /**
  * DANGER ZONE: Protected Admin Utilities
- * In a real environment, wrap these in your 'admin' middleware!
+ * We now use 'auth:admin' to ensure the middleware checks the 'admin' session
  */
-Route::middleware(['auth', 'admin'])->group(function () {
+Route::middleware(['auth:admin'])->group(function () {
     Route::get('/clear-cache', function() {
         Artisan::call('route:clear');
         Artisan::call('config:clear');
