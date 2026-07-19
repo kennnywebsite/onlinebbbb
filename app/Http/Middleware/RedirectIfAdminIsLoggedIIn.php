@@ -15,11 +15,12 @@ class RedirectIfAdminIsLoggedIIn
      * @param  \Closure  $next
      * @return mixed
      */
-    public function handle(Request $request, Closure $next)
-    {
-        if (Auth::guard('admin')->check()) {
-            return redirect('/admin/dashboard');
-        }
-        return $next($request);
+    public function handle($request, Closure $next)
+{
+    if (Auth::guard('admin')->check()) {
+        // Change this to redirect to dashboard if already logged in
+        return redirect()->route('admin.dashboard');
     }
+    return $next($request);
+}
 }

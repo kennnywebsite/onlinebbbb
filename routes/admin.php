@@ -35,7 +35,11 @@ Route::prefix('auth')->group(function () {
     Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
     Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
     Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
-    Route::get('dashboard', [HomeController::class, 'index'])->name('admin.dashboard')->middleware('auth:admin');
+    
+    // Use 'isadmin' here which points to App\Http\Middleware\EnsureIsAdmin
+    Route::get('dashboard', [HomeController::class, 'index'])
+        ->name('admin.dashboard')
+        ->middleware('isadmin'); 
 });
 
 // Two Factor controller for Admin.
