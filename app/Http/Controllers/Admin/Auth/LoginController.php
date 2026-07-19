@@ -1,4 +1,32 @@
-/**
+<?php
+
+namespace App\Http\Controllers\Admin\Auth;
+
+use App\Models\Admin;
+use App\Models\Settings;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Mail\Twofa;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log; // Added for Logging
+
+class LoginController extends Controller
+{
+    /**
+     * Show the login form.
+     * 
+     * @return \Illuminate\Http\Response
+     */
+    public function showLoginForm()
+    {
+        return view('auth.adminlogin',[
+            'title' => 'Admin Login',
+            'settings' => Settings::where('id', '=', '1')->first(),
+        ]);
+    }
+
+    /**
      * Login the admin.
      * 
      * @param \Illuminate\Http\Request $request
@@ -16,7 +44,7 @@
 
         if (Auth::guard('admin')->attempt($credentials)) {
             // Log successful attempt
-            \Log::info('Admin login successful for: ' . $request->email);
+            Log::info('Admin login successful for: ' . $request->email);
             
             $request->session()->regenerate();
 
@@ -46,9 +74,35 @@
         }
         
         // Log failed attempt
-        \Log::warning('Login failed for: ' . $request->email);
+        Log::warning('Login failed for: ' . $request->email);
         
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records or account is inactive.',
         ]);
     }
+
+    public function validate_admin(){
+        if (Auth::guard('admin')->check()){
+            return redirect()->intended('/admin/dashboard')
+            ->with('message','You are Logged in as Admin!');
+        }else {
+            return redirect()->route('adminloginform')
+            ->with('message','Not allowed');
+        }
+    }
+
+    /**
+     * Logout the admin.
+     * 
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function adminlogout(Request $request)
+    {
+        Auth::guard('admin')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect()
+            ->route('adminloginform')
+            ->with('status','Admin has been logged out!');
+    }
+}
