@@ -61,7 +61,7 @@ class LoginController extends Controller
                 return redirect('/admin/2fa');
             }
 
-            return redirect()->intended('/admin/dashboard');
+            return redirect()->route('admin.dashboard');
         }
 
         // 4. Failed Login

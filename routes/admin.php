@@ -32,10 +32,15 @@ use App\Http\Controllers\Admin\TransactionHistoryController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
-	Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
-	Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
-	Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
-	Route::get('dashboard', [LoginController::class, 'validate_admin'])->name('validate_admin');
+    Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
+    Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
+    Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
+    
+    // CHANGE THIS LINE:
+    // Don't call 'validate_admin'. Call your actual dashboard controller.
+    Route::get('dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index'])
+         ->name('admin.dashboard')
+         ->middleware('auth:admin'); 
 });
 
 // Two Factor controller for Admin.
