@@ -19,15 +19,13 @@ class EnsureIsAdmin
      */
     public function handle(Request $request, Closure $next)
 {
-    // Debugging: If this log doesn't show in storage/logs/laravel.log, 
-    // the middleware isn't even being hit.
     if (Auth::guard('admin')->check()) {
         return $next($request);
     } 
     
-    // If we are here, the guard is NOT checked. 
-    // Instead of redirecting to a route that might redirect back, 
-    // just redirect to login form directly.
-    return redirect()->route('adminloginform')->with('message', 'Access Denied.');
+    // LOG THE FAILURE TO SEE WHY IT'S REJECTING YOU
+    \Log::error('Admin Auth Check Failed. Guard: admin. User: ' . Auth::guard('admin')->user());
+    
+    return redirect()->route('adminloginform')->with('message', 'Session expired or not authorized.');
 }
 }
