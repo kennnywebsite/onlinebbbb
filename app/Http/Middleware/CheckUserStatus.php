@@ -13,13 +13,14 @@ class CheckUserStatus
     {
         Log::info('CheckUserStatus: Checking path: ' . $request->path());
 
-        // Skip middleware if admin
-        if (Auth::guard('admin')->check()) {
-            Log::info('CheckUserStatus: Admin detected, skipping status check.');
+        // 1. Skip middleware if the request is for the admin area
+        // This prevents the web-based status logic from interfering with Admin sessions
+        if ($request->is('admin/*') || $request->is('auth/*')) {
+            Log::info('CheckUserStatus: Admin area detected, skipping status check.');
             return $next($request);
         }
 
-        // Check Web user status
+        // 2. Check Web user status
         if (Auth::guard('web')->check()) {
             $user = Auth::guard('web')->user();
             Log::info('CheckUserStatus: Checking web user status for ID: ' . $user->id);
