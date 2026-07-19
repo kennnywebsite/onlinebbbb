@@ -81,15 +81,12 @@ class LoginController extends Controller
         ]);
     }
 
-    public function validate_admin(){
-        if (Auth::guard('admin')->check()){
-            return redirect()->intended('/admin/dashboard')
-            ->with('message','You are Logged in as Admin!');
-        }else {
-            return redirect()->route('adminloginform')
-            ->with('message','Not allowed');
-        }
-    }
+    public function validate_admin()
+{
+    // Because this method is protected by 'isadmin' middleware, 
+    // we know the user is already authenticated.
+    return view('admin.dashboard'); // Or whatever your view file is named
+}
 
     /**
      * Logout the admin.

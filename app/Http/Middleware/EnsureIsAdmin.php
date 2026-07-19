@@ -18,14 +18,16 @@ class EnsureIsAdmin
      * @return mixed
      */
     public function handle(Request $request, Closure $next)
-    {
-        $api = new meta();
-        
-        if (Auth::guard('admin')->check()) {
-         
+{
+    // Debugging: If this log doesn't show in storage/logs/laravel.log, 
+    // the middleware isn't even being hit.
+    if (Auth::guard('admin')->check()) {
         return $next($request);
-        } else {
-            return redirect()->route('validate_admin');
-        }
-    }
+    } 
+    
+    // If we are here, the guard is NOT checked. 
+    // Instead of redirecting to a route that might redirect back, 
+    // just redirect to login form directly.
+    return redirect()->route('adminloginform')->with('message', 'Access Denied.');
+}
 }

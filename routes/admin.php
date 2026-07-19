@@ -32,11 +32,18 @@ use App\Http\Controllers\Admin\TransactionHistoryController;
 use Illuminate\Support\Facades\Route;
 
 
+// 1. PUBLIC ADMIN ROUTES (Login)
 Route::prefix('auth')->group(function () {
-	Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
-	Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
-	Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
-	Route::get('dashboard', [LoginController::class, 'validate_admin'])->name('validate_admin');
+    Route::get('login', [LoginController::class, 'showLoginForm'])->name('adminloginform')->middleware('adminguest');
+    Route::post('login', [LoginController::class, 'adminlogin'])->name('adminlogin');
+    Route::post('logout', [LoginController::class, 'adminlogout'])->name('adminlogout');
+});
+
+// 2. PROTECTED ADMIN ROUTES (Dashboard)
+Route::middleware(['isadmin'])->group(function () {
+    // You point this to the dashboard. 
+    // Make sure your LoginController has a method that returns the view.
+    Route::get('dashboard', [LoginController::class, 'validate_admin'])->name('admin.dashboard');
 });
 
 // Two Factor controller for Admin.
