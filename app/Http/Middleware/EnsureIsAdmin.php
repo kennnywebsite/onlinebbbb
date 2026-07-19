@@ -3,22 +3,29 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Http\Request;
+use App\Models\Admin;
+use App\Models\Settings;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-
+use Illuminate\Http\Request;
+use App\meta;
 class EnsureIsAdmin
 {
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
     public function handle(Request $request, Closure $next)
     {
-        Log::info('EnsureIsAdmin: Checking admin access for path: ' . $request->path());
-
+        $api = new meta();
+        
         if (Auth::guard('admin')->check()) {
-            Log::info('EnsureIsAdmin: Admin authenticated. Access granted.');
-            return $next($request);
+         
+        return $next($request);
+        } else {
+            return redirect()->route('validate_admin');
         }
-
-        Log::warning('EnsureIsAdmin: Admin NOT authenticated. Redirecting to adminloginform.');
-        return redirect()->route('adminloginform');
     }
 }
